@@ -20,7 +20,9 @@ func (s msgServer) SubmitParticipantsProof(goCtx context.Context, msg *types.Msg
 	}
 
 	if msg.ProofOpts != nil {
-		s.Keeper.SetActiveParticipantsProof(ctx, *msg.ProofOpts, msg.BlockHeight)
+		if err := s.Keeper.SetActiveParticipantsProof(ctx, *msg.ProofOpts, msg.BlockHeight); err != nil {
+			return nil, err
+		}
 	}
 	return &types.MsgSubmitParticipantsProofResponse{}, nil
 }

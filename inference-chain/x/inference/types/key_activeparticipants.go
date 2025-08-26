@@ -28,12 +28,3 @@ func ActiveParticipantsFullKey(epoch uint64) []byte {
 
 	return key
 }
-
-func ActiveParticipantsProofFullKey(blockHeight uint64) []byte {
-	var key []byte
-	key = append(key, []byte(ActiveParticipantsProofKeyPrefix)...)
-	key = append(key, sdk.Uint64ToBigEndian(blockHeight)...)
-	key = append(key, []byte("/")...)
-
-	return key
-}

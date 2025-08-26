@@ -42,30 +42,21 @@ func (k Keeper) SetActiveParticipants(ctx context.Context, participants types.Ac
 	store.Set(key, b)
 }
 
-func (k Keeper) SetActiveParticipantsProof(ctx context.Context, proof types.ProofOps, blockHeight uint64) {
-	storeAdapter := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	store := prefix.NewStore(storeAdapter, []byte{})
-
-	key := types.ActiveParticipantsProofFullKey(blockHeight)
-	if store.Has(key) {
-		return
+func (k Keeper) SetActiveParticipantsProof(ctx context.Context, proof types.ProofOps, blockHeight uint64) error {
+	exists, err := k.ActiveParticipantsProofs.Has(ctx, blockHeight)
+	if err != nil {
+		return err
 	}
-
-	b := k.cdc.MustMarshal(&proof)
-	store.Set(key, b)
+	if exists {
+		return nil
+	}
+	return k.ActiveParticipantsProofs.Set(ctx, blockHeight, proof)
 }
 
 func (k Keeper) GetActiveParticipantsProof(ctx context.Context, blockHeight int64) (types.ProofOps, bool) {
-	storeAdapter := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	store := prefix.NewStore(storeAdapter, []byte{})
-
-	key := types.ActiveParticipantsProofFullKey(uint64(blockHeight))
-	b := store.Get(key)
-	if b == nil {
+	v, err := k.ActiveParticipantsProofs.Get(ctx, uint64(blockHeight))
+	if err != nil {
 		return types.ProofOps{}, false
 	}
-
-	var val types.ProofOps
-	k.cdc.MustUnmarshal(b, &val)
-	return val, true
+	return v, true
 }

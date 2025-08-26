@@ -237,9 +237,16 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 				am.LogError("BeginBlock: unable to unpack validator public key", types.Participants, "epoch", epochIndex)
 			}
 
-			// PANIC: consPubKey may be nil if UnpackAny failed; calling Bytes() on a nil interface panics
+			if consPubKey == nil || len(consPubKey.Bytes()) != ed25519.PubKeySize {
+				am.LogError("BeginBlock: invalid ed25519 pubkey length from validator", types.Participants)
+				continue
+			}
+
 			pk := ed25519.PubKey(consPubKey.Bytes())
-			// PANIC: pk.Address() may panic if the underlying ed25519 key bytes are invalid length
+			if len(pk.Bytes()) != ed25519.PubKeySize {
+				am.LogError("BeginBlock: invalid ed25519 pubkey length from validator", types.Participants)
+				continue
+			}
 			addr := strings.ToUpper(pk.Address().String())
 
 			am.LogInfo("BeginBlock participant address from validator cons address", types.Participants, "consensus addr hex", addr)
@@ -260,7 +267,12 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 			continue
 		}
 		pk := ed25519.PubKey(keyBytes)
-		// PANIC: pk.Address() may panic if keyBytes length is invalid (e.g., empty or not 32 bytes)
+		if len(keyBytes) != ed25519.PubKeySize {
+			am.LogError("Invalid ed25519 pubkey length from participants", types.Participants,
+				"got_bytes", len(keyBytes), "want_bytes", ed25519.PubKeySize)
+			continue
+		}
+
 		addr := strings.ToUpper(pk.Address().String())
 		am.LogInfo("BeginBlock participant address", types.Participants, "consensus addr hex", addr)
 

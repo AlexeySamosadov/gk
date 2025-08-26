@@ -39,7 +39,12 @@ var (
 	TopMinerPrefix                   = collections.NewPrefix(16)
 	PartialUpgradePrefix             = collections.NewPrefix(17)
 	EpochPerformanceSummaryPrefix    = collections.NewPrefix(18)
-	ParamsKey                        = []byte("p_inference")
+	ActiveParticipantsProofPrefix    = collections.NewPrefix(19)
+	BlockProofPrefix                 = collections.NewPrefix(20)
+	PendingProofPrefix               = collections.NewPrefix(21)
+	ValidatorsProofPrefix            = collections.NewPrefix(22)
+
+	ParamsKey = []byte("p_inference")
 )
 
 func KeyPrefix(p string) []byte {

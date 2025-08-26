@@ -56,6 +56,12 @@ type (
 		TopMiners                 collections.Map[sdk.AccAddress, types.TopMiner]
 		PartialUpgrades           collections.Map[uint64, types.PartialUpgrade]
 		EpochPerformanceSummaries collections.Map[collections.Pair[sdk.AccAddress, uint64], types.EpochPerformanceSummary]
+
+		// Proofs
+		ActiveParticipantsProofs collections.Map[uint64, types.ProofOps]
+		BlockProofs              collections.Map[uint64, types.BlockProof]
+		PendingProofs            collections.Map[uint64, uint64]
+		ValidatorsProofs         collections.Map[uint64, types.ValidatorsProof]
 	}
 )
 
@@ -235,6 +241,28 @@ func NewKeeper(
 			"epoch_performance_summary",
 			collections.PairKeyCodec(sdk.AccAddressKey, collections.Uint64Key),
 			codec.CollValue[types.EpochPerformanceSummary](cdc),
+		),
+		ActiveParticipantsProofs: collections.NewMap(
+			sb,
+			types.ActiveParticipantsProofPrefix,
+			"active_participants_proofs",
+			collections.Uint64Key,
+			codec.CollValue[types.ProofOps](cdc),
+		),
+		BlockProofs: collections.NewMap(
+			sb, types.BlockProofPrefix, "block_proofs",
+			collections.Uint64Key,
+			codec.CollValue[types.BlockProof](cdc),
+		),
+		PendingProofs: collections.NewMap(
+			sb, types.PendingProofPrefix, "pending_proofs",
+			collections.Uint64Key,
+			collections.Uint64Value,
+		),
+		ValidatorsProofs: collections.NewMap(
+			sb, types.ValidatorsProofPrefix, "validators_proofs",
+			collections.Uint64Key,
+			codec.CollValue[types.ValidatorsProof](cdc),
 		),
 	}
 	// Build the collections schema

@@ -48,13 +48,15 @@ func TestBlockProof(t *testing.T) {
 		assert.False(t, found)
 
 		epoch := uint64(345)
-		k.SetPendingProof(ctx, h, epoch)
+		err := k.SetPendingProof(ctx, h, epoch)
+		assert.NoError(t, err)
 
 		pendingProofEpochId, found := k.GetPendingProof(ctx, h)
 		assert.True(t, found)
 		assert.Equal(t, epoch, pendingProofEpochId)
 
-		k.SetPendingProof(ctx, h, 123214)
+		err = k.SetPendingProof(ctx, h, 123214)
+		assert.NoError(t, err)
 
 		pendingProofEpochId, found = k.GetPendingProof(ctx, h)
 		assert.True(t, found)

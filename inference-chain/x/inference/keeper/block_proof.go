@@ -2,77 +2,47 @@ package keeper
 
 import (
 	"context"
-	"errors"
-
-	"github.com/cosmos/cosmos-sdk/runtime"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
 )
 
-const (
-	blockProofKeyPrefix   = "BlockProof/"
-	pendingProofKeyPrefix = "PendingProof/"
-)
-
-func blockProofFullKey(createAtBlockHeight uint64) []byte {
-	var key []byte
-
-	key = append(key, []byte(blockProofKeyPrefix)...)
-	key = append(key, sdk.Uint64ToBigEndian(createAtBlockHeight)...)
-	return key
-}
-
-func pendingProofKey(height uint64) []byte {
-	var key []byte
-	key = append(key, []byte(pendingProofKeyPrefix)...)
-	key = append(key, sdk.Uint64ToBigEndian(height)...)
-	return key
-}
-
 func (k Keeper) SetBlockProof(ctx context.Context, proof types.BlockProof) error {
-	store := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	key := blockProofFullKey(uint64(proof.CreatedAtBlockHeight))
+	h := uint64(proof.CreatedAtBlockHeight)
 
-	if store.Has(key) {
-		return errors.New("block proof already exists")
+	exists, err := k.BlockProofs.Has(ctx, h)
+	if err != nil {
+		return err
 	}
-
-	// PANIC: MustMarshal panics if the proof cannot be marshaled (codec error/corrupted types)
-	bz := k.cdc.MustMarshal(&proof)
-	store.Set(key, bz)
-	return nil
+	if exists {
+		return nil
+	}
+	return k.BlockProofs.Set(ctx, h, proof)
 }
 
 func (k Keeper) GetBlockProof(ctx context.Context, height int64) (types.BlockProof, bool) {
-	store := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	key := blockProofFullKey(uint64(height))
-	bz := store.Get(key)
-	if bz == nil {
+	v, err := k.BlockProofs.Get(ctx, uint64(height))
+	if err != nil {
 		return types.BlockProof{}, false
 	}
-
-	var proof types.BlockProof
-	// PANIC: MustUnmarshal panics if stored BlockProof bytes are invalid
-	k.cdc.MustUnmarshal(bz, &proof)
-	return proof, true
+	return v, true
 }
 
-func (k Keeper) SetPendingProof(ctx context.Context, height int64, participantsEpoch uint64) {
-	store := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	if store.Has(pendingProofKey(uint64(height))) {
-		return
+func (k Keeper) SetPendingProof(ctx context.Context, height int64, participantsEpoch uint64) error {
+	h := uint64(height)
+
+	exists, err := k.PendingProofs.Has(ctx, h)
+	if err != nil {
+		return err
 	}
-	store.Set(pendingProofKey(uint64(height)), sdk.Uint64ToBigEndian(participantsEpoch))
+	if exists {
+		return nil
+	}
+	return k.PendingProofs.Set(ctx, h, participantsEpoch)
 }
 
 func (k Keeper) GetPendingProof(ctx context.Context, height int64) (uint64, bool) {
-	store := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-
-	bz := store.Get(pendingProofKey(uint64(height)))
-	if bz == nil {
+	v, err := k.PendingProofs.Get(ctx, uint64(height))
+	if err != nil {
 		return 0, false
 	}
-
-	epochId := sdk.BigEndianToUint64(bz)
-	return epochId, true
+	return v, true
 }
