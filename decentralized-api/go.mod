@@ -29,6 +29,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.8.4
 	github.com/nats-io/nats.go v1.34.0
 	github.com/pkg/errors v0.9.1
+	github.com/productscience/common v0.0.0-00010101000000-000000000000
 	github.com/productscience/inference v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.38.0
@@ -261,6 +262,6 @@ require (
 replace (
 	github.com/cosmos/cosmos-sdk => github.com/product-science/cosmos-sdk v0.53.3-ps5
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
-	github.com/productscience/common => ./../common
+	github.com/productscience/common => ../common
 	github.com/productscience/inference => ../inference-chain
 )

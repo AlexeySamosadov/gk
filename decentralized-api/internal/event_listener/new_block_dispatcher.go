@@ -594,5 +594,7 @@ func getParticipantsProof(rpcClient *rpcclient.HTTP, epochId uint64, height int6
 			proofOps.Ops = append(proofOps.Ops, types.ProofOp(op))
 		}
 	}
+
+	proofOps.Epoch = epochId
 	return proofOps, nil
 }

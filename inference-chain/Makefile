@@ -77,7 +77,7 @@ define DOCKER_BUILD
 		--build-arg GOARCH=$(GOARCH) \
 		--build-arg GENESIS_OVERRIDES_FILE=$(GENESIS_OVERRIDES_FILE) \
 		-f $(DOCKER_FILE) \
-		.docker-context \
+		.. \
 		-t $(DOCKER_TAG)
 	@rm -rf .docker-context
 endef

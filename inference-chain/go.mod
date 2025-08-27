@@ -293,4 +293,4 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace github.com/productscience/common => ./../common
+replace github.com/productscience/common => ../common
