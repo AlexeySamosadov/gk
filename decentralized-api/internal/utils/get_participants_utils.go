@@ -22,6 +22,7 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/gonka-ai/gonka-utils/go/contracts"
 	externalutils "github.com/gonka-ai/gonka-utils/go/utils"
+	"github.com/productscience/common"
 	"github.com/productscience/inference/x/inference/types"
 )
 
@@ -168,9 +169,9 @@ func QueryActiveParticipants(rpcClient *rpcclient.HTTP, queryClient types.QueryC
 			}
 		}
 
-		block := ToContractsBlockProof(blockProof.Proof)
-		validators := ToContractsValidatorsProof(proofResp.ValidatorsProof)
-		proofOps := ToCryptoProofOps(proofResp.MerkleProof)
+		block := common.ToContractsBlockProof(blockProof.Proof)
+		validators := common.ToContractsValidatorsProof(proofResp.ValidatorsProof)
+		proofOps := common.ToCryptoProofOps(proofResp.MerkleProof)
 		return &contracts.ActiveParticipantWithProof{
 			ActiveParticipants:      finalParticipants,
 			Addresses:               addresses,
@@ -178,6 +179,7 @@ func QueryActiveParticipants(rpcClient *rpcclient.HTTP, queryClient types.QueryC
 			ProofOps:                proofOps,
 			BlockProof:              block,
 			ValidatorsProof:         validators,
+			ChainId:                 "gonka-mainnet",
 		}, nil
 	}
 }

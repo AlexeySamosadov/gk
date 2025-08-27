@@ -39,6 +39,7 @@ require (
 	github.com/cosmos/ibc-go/modules/capability v1.0.0
 	github.com/cosmos/ibc-go/v8 v8.2.0
 	github.com/golang/protobuf v1.5.4
+	github.com/gonka-ai/gonka-utils/go v0.0.0-20250827130032-060fa8a30bc4
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
@@ -46,6 +47,7 @@ require (
 	github.com/ignite/cli/v28 v28.11.0
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
+	github.com/productscience/common v0.0.0-00010101000000-000000000000
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/cast v1.8.0
 	github.com/spf13/cobra v1.9.1
@@ -290,3 +292,5 @@ require (
 	rsc.io/qr v0.2.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/productscience/common => ./../common

@@ -1,4 +1,4 @@
-package utils
+package common
 
 import (
 	cryptotypes "github.com/cometbft/cometbft/proto/tendermint/crypto"

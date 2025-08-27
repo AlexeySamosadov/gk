@@ -55,5 +55,6 @@ message ProofOp {
 
 message ProofOps {
   int64 block_height             = 1;
-  repeated ProofOp ops = 2 [(gogoproto.nullable) = false];
+  uint64 epoch = 2;
+  repeated ProofOp ops = 3 [(gogoproto.nullable) = false];
 }

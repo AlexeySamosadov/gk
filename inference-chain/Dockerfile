@@ -37,6 +37,7 @@ RUN wget -O /root/cw20_base.wasm \
     https://github.com/CosmWasm/cw-plus/releases/download/v2.0.0/cw20_base.wasm \
     && echo "4d8e90dd340993033f1b9e8e3a3ee7f8673c582ca9bcdd8c8cf3c7470d6537d5 /root/cw20_base.wasm" | sha256sum -c
 
+COPY common/ /app/common
 WORKDIR /app/inference-chain
 
 COPY inference-chain/go.mod inference-chain/go.sum ./

@@ -35,6 +35,7 @@ RUN if [ "$GOARCH" = "arm64" ]; then \
     fi
 
 COPY inference-chain/ /app/inference-chain
+COPY common/ /app/common
 
 WORKDIR /app/decentralized-api
 COPY decentralized-api/go.mod decentralized-api/go.sum ./
