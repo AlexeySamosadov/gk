@@ -105,7 +105,7 @@ define DOCKER_BUILD_UPGRADE
 		--target binary-exporter \
 		-f $(DOCKER_FILE) \
 		--output type=local,dest=./output \
-		.docker-context
+		.. \
 	@rm -rf .docker-context
 endef
 
