@@ -14,3 +14,8 @@ export NB_SUBNET_ID=$(nebius vpc subnet create \
    --name "$SUBNET_NAME" \
    --network-id "$NB_NETWORK_ID" \
    --format json | jq -r ".metadata.id")
+
+# Go to nebius AI cloud and create a L40S, 1CPU, 64GB RAM instance
+
+# To connect to the instance:
+ssh dima@89.169.111.79
