@@ -2,6 +2,7 @@ import os
 import shutil
 import hashlib
 import urllib.request
+import zipfile
 from pathlib import Path
 
 
@@ -67,7 +68,8 @@ def install_inferenced():
     # Extract if directory doesn't exist
     if not inferenced_path.exists():
         print(f"Extracting {inferenced_zip} to {inferenced_path}")
-        os.system(f"unzip {inferenced_zip} -d {inferenced_path}")
+        with zipfile.ZipFile(inferenced_zip, 'r') as zip_ref:
+            zip_ref.extractall(inferenced_path)
     else:
         print(f"{inferenced_path} already exists")
 
