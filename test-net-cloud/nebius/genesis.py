@@ -3,6 +3,7 @@ import shutil
 import hashlib
 import urllib.request
 import zipfile
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -76,11 +77,49 @@ def install_inferenced():
     
     # Extract if directory doesn't exist
     if not inferenced_path.exists():
-        print(f"Extracting {inferenced_zip} to {inferenced_path}")
+        print(f"Extracting {inferenced_zip} to {BASE_DIR}")
         with zipfile.ZipFile(inferenced_zip, 'r') as zip_ref:
-            zip_ref.extractall(inferenced_path)
+            zip_ref.extractall(BASE_DIR)
     else:
         print(f"{inferenced_path} already exists")
+
+
+def create_account_key():
+    """Create account key using inferenced CLI"""
+    inferenced_binary = INFERENCED_BINARY.path
+    
+    if not inferenced_binary.exists():
+        raise FileNotFoundError(f"Inferenced binary not found at {inferenced_binary}")
+    
+    # Check if key already exists
+    try:
+        result = subprocess.run(
+            [str(inferenced_binary), "keys", "list", "--keyring-backend", "file"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        if "gonka-account-key" in result.stdout:
+            print("Account key 'gonka-account-key' already exists")
+            return
+    except subprocess.CalledProcessError:
+        # Keyring might not exist yet, which is fine
+        pass
+    
+    print("Creating account key 'gonka-account-key'...")
+    print("NOTE: You will be prompted for a passphrase. Make sure to remember it!")
+    print("The mnemonic phrase will be displayed - save it securely!")
+    
+    # Execute the key creation command
+    # This will be interactive, so we don't capture output
+    subprocess.run([
+        str(inferenced_binary), 
+        "keys", 
+        "add", 
+        "gonka-account-key", 
+        "--keyring-backend", 
+        "file"
+    ], check=True)
 
 
 def main():
@@ -93,6 +132,9 @@ def main():
     clone_repo()
     create_state_dirs()
     install_inferenced()
+
+    # Create local 
+    create_account_key()
 
 
 if __name__ == "__main__":
