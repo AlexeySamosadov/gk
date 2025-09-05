@@ -23,9 +23,9 @@ ssh ubuntu@89.169.111.79
 ssh testnet-1
 
 # Copy the script to the instance
-scp genesis.py testnet@89.169.111.79:/home/testnet/
+scp genesis.py ubuntu@89.169.111.79:/home/ubuntu/
 # or
-scp genesis.py testnet-1:/home/testnet/
+scp genesis.py testnet-1:/home/ubuntu/
 
 # Additional on-machine steps:
 sudo apt get update
