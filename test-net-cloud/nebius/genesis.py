@@ -65,10 +65,41 @@ def clean_state():
         os.system(f"sudo rm -rf {INFERENCED_STATE_DIR}")
 
 
+def docker_compose_down():
+    """Stop and remove all Docker containers from previous runs"""
+    if DEPLOY_DIR.exists():
+        print("Stopping any running Docker containers...")
+        try:
+            # First try to stop containers gracefully
+            result = subprocess.run(
+                ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.mlnode.yml", "down"],
+                cwd=DEPLOY_DIR,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0:
+                print("Docker containers stopped successfully")
+            else:
+                print(f"Warning: docker compose down returned code {result.returncode}")
+                if result.stderr:
+                    print(f"Error output: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            print("Warning: docker compose down timed out, trying force stop...")
+            # Force stop if graceful shutdown times out
+            os.system(f"cd {DEPLOY_DIR} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml down --timeout 5")
+        except Exception as e:
+            print(f"Warning: Error stopping Docker containers: {e}")
+            # Try force stop as fallback
+            os.system(f"cd {DEPLOY_DIR} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml down --timeout 5")
+    else:
+        print("Deploy directory doesn't exist, skipping Docker cleanup")
+
+
 def clone_repo():
     if not GONKA_REPO_DIR.exists():
         print(f"Cloning {GONKA_REPO_DIR}")
-        os.system(f"git clone https://github.com/gonka-ai/gonka.git {GONKA_REPO_DIR}")
+    os.system(f"git clone https://github.com/gonka-ai/gonka.git {GONKA_REPO_DIR}")
     else:
         print(f"{GONKA_REPO_DIR} already exists")
 
@@ -78,7 +109,7 @@ def create_state_dirs():
     my_dir = GONKA_REPO_DIR / f"genesis/validators/{GENESIS_VAL_NAME}"
     if not my_dir.exists():
         print(f"Creating {my_dir}")
-        os.system(f"cp -r {template_dir} {my_dir}")
+    os.system(f"cp -r {template_dir} {my_dir}")
     else:
         print(f"{my_dir} already exists, contents: {list(my_dir.iterdir())}")
 
@@ -428,8 +459,11 @@ def main():
         print(f"Changing directory to {BASE_DIR}")
         os.chdir(BASE_DIR)
 
-    # Prepare
+    # Clean up any existing state
+    docker_compose_down()  # Stop any running containers before cleanup
     clean_state()
+    
+    # Set up fresh environment
     clone_repo()
     create_state_dirs()
     install_inferenced()
@@ -437,6 +471,11 @@ def main():
     # Create local 
     create_account_key()
     create_config_env_file()
+    
+    # Clean up any containers that might have been started during setup
+    docker_compose_down()  # Ensure clean state before starting new containers
+    
+    # Run the main processes
     pull_images()
     run_genesis_initialization()
     extract_consensus_key()
