@@ -4,6 +4,8 @@ import hashlib
 import urllib.request
 import zipfile
 import subprocess
+import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -160,6 +162,25 @@ def create_account_key():
     print("Account key created successfully!")
     print("Key details:")
     print(stdout)
+    
+    # Extract the public key from the output
+    
+    # Look for the pubkey line in the output
+    pubkey_match = re.search(r"pubkey: '(.+?)'", stdout)
+    if pubkey_match:
+        pubkey_json = pubkey_match.group(1)
+        try:
+            pubkey_data = json.loads(pubkey_json)
+            public_key = pubkey_data.get("key", "")
+            if public_key:
+                CONFIG_ENV["ACCOUNT_PUBKEY"] = public_key
+                print(f"Extracted public key: {public_key}")
+            else:
+                print("Warning: Could not extract key from pubkey JSON")
+        except json.JSONDecodeError:
+            print("Warning: Could not parse pubkey JSON")
+    else:
+        print("Warning: Could not find pubkey in output")
 
 
 def create_config_env_file():
