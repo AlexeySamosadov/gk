@@ -28,11 +28,11 @@ CONFIG_SUBSTITUTIONS = {
     "PUBLIC_URL": "http://89.169.111.79:8000", # TODO: allow to customize
     "P2P_EXTERNAL_ADDRESS": "tcp://89.169.111.79:5000", # TODO: allow to customize
     "HF_HOME": (Path(os.environ["HOME"]).absolute() / "hf-cache").__str__(),
-    "SEED_API_URL": "http://node2.gonka.ai:8000", # FIXME:
-    "SEED_NODE_RPC_URL": "http://node2.gonka.ai:26657", # FIXME:
-    "SEED_NODE_P2P_URL": "tcp://node2.gonka.ai:5000", # FIXME:
-    "RPC_SERVER_URL_1": "http://node1.gonka.ai:26657", # FIXME:
-    "RPC_SERVER_URL_2": "http://node2.gonka.ai:26657", # FIXME:
+    "SEED_API_URL": "http://89.169.111.79:8000",
+    "SEED_NODE_RPC_URL": "http://89.169.111.79:26657",
+    "SEED_NODE_P2P_URL": "tcp://89.169.111.79:5000",
+    "RPC_SERVER_URL_1": "http://89.169.111.79:26657",
+    "RPC_SERVER_URL_2": "http://89.169.111.79:26657",
 }
 
 def clean_state():
