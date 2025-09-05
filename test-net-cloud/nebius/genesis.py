@@ -232,6 +232,8 @@ def main():
 
     # Create local 
     create_account_key()
+    create_config_env_file()
+    pull_images()
 
 
 if __name__ == "__main__":
