@@ -648,9 +648,11 @@ def generate_gentx(account_key: AccountKey, consensus_key: str, node_id: str, wa
         print(f"Gentx generation failed with return code: {process.returncode}")
         raise subprocess.CalledProcessError(process.returncode, gentx_cmd)
     
-    # Extract the generated file paths from output
-    gentx_file_match = re.search(r'gentx-([a-f0-9]+)\.json', stdout)
-    genparticipant_file_match = re.search(r'genparticipant-([a-f0-9]+)\.json', stdout)
+    # Extract the generated file paths from output (check both stdout and stderr)
+    full_output = stdout + stderr if stderr else stdout
+    
+    gentx_file_match = re.search(r'gentx-([a-f0-9]+)\.json', full_output)
+    genparticipant_file_match = re.search(r'genparticipant-([a-f0-9]+)\.json', full_output)
     
     if gentx_file_match and genparticipant_file_match:
         gentx_file = f"gentx-{gentx_file_match.group(1)}.json"
@@ -660,6 +662,7 @@ def generate_gentx(account_key: AccountKey, consensus_key: str, node_id: str, wa
         return gentx_file, genparticipant_file
     else:
         print("Warning: Could not extract generated file names from output")
+        print(f"Full output for debugging: {full_output}")
         return None, None
 
 
