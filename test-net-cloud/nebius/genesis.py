@@ -207,7 +207,6 @@ def create_account_key():
             pubkey_data = json.loads(pubkey_json)
             public_key = pubkey_data.get("key", "")
             if public_key:
-                CONFIG_ENV["ACCOUNT_PUBKEY"] = public_key
                 print(f"Extracted public key: {public_key}")
                 return public_key
             else:
@@ -545,6 +544,7 @@ def main():
 
     # Create local 
     cold_pubkey = create_account_key()
+    CONFIG_ENV["ACCOUNT_PUBKEY"] = cold_pubkey
     create_config_env_file()
     
     # Clean up any containers that might have been started during setup
