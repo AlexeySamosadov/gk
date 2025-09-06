@@ -209,12 +209,13 @@ def create_account_key():
             if public_key:
                 CONFIG_ENV["ACCOUNT_PUBKEY"] = public_key
                 print(f"Extracted public key: {public_key}")
+                return public_key
             else:
-                print("Warning: Could not extract key from pubkey JSON")
+                raise ValueError("Could not extract key from pubkey JSON")
         except json.JSONDecodeError:
-            print("Warning: Could not parse pubkey JSON")
+            raise ValueError("Could not parse pubkey JSON")
     else:
-        print("Warning: Could not find pubkey in output")
+        raise ValueError("Could not find pubkey in output")
 
 
 def create_config_env_file():
@@ -484,7 +485,7 @@ def get_or_create_warm_key(service="api"):
     raise ValueError("Failed to extract pubkey from warm key creation output")
 
 
-def add_genesis_account():
+def add_genesis_account(cold_pubkey: str):
     """Add genesis account using the cold key address"""
     working_dir = GONKA_REPO_DIR / "deploy/join"
     config_file = working_dir / "config.env"
@@ -497,31 +498,10 @@ def add_genesis_account():
     
     # Get the cold account address from the earlier key creation
     # We need to extract it from the account key creation output
-    print("Adding genesis account...")
-    
-    # First, let's get the address from the cold key we created earlier
-    # We'll run a command to show the key and extract the address
-    show_address_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T node sh -lc \"inferenced keys show \\$KEY_NAME --keyring-backend file --address\"'"
-    
-    print("Getting cold key address...")
-    address_result = subprocess.run(
-        show_address_cmd,
-        shell=True,
-        cwd=working_dir,
-        capture_output=True,
-        text=True
-    )
-    
-    if address_result.returncode != 0:
-        print(f"Error getting address: {address_result.stderr}")
-        raise subprocess.CalledProcessError(address_result.returncode, show_address_cmd)
-    
-    # Extract the address from output
-    address_output = address_result.stdout.strip()
-    print(f"Cold key address: {address_output}")
+    print(f"Adding genesis account. cold_pubkey = {cold_pubkey}")
     
     # Now run the genesis add-genesis-account command
-    genesis_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T node sh -lc \"inferenced genesis add-genesis-account {address_output}\"'"
+    genesis_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T node sh -lc \"inferenced genesis add-genesis-account {address_output} 1ngonka\"'"
     
     print("Running genesis add-genesis-account command...")
     genesis_result = subprocess.run(
@@ -564,7 +544,7 @@ def main():
     install_inferenced()
 
     # Create local 
-    create_account_key()
+    cold_pubkey = create_account_key()
     create_config_env_file()
     
     # Clean up any containers that might have been started during setup
@@ -575,7 +555,7 @@ def main():
     run_genesis_initialization()
     extract_consensus_key()
     get_or_create_warm_key()
-    add_genesis_account()
+    add_genesis_account(cold_pubkey)
 
 
 if __name__ == "__main__":
