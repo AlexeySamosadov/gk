@@ -579,5 +579,31 @@ def main():
     add_genesis_account(account_key)
 
 
+"""
+./inferenced genesis gentx \
+    --keyring-backend file \
+    <cold_key_name> 1ngonka \
+    --moniker <YOUR_VALIDATOR_NAME> \
+    --pubkey <consensus-pubkey-from-step-1.3> \
+    --ml-operational-address <ml-operational-key-address-from-step-1.4> \
+    --url $PUBLIC_URL \
+    --chain-id gonka-mainnet \
+    --node-id <node-id-from-step-1.2>
+
+./inferenced genesis gentx \
+    --keyring-backend file \
+    gonka-account-key 1ngonka \
+    --moniker testnet-genesis \
+    --pubkey "AMchkuYDLMDN9C630s3/AqnV1wLLlOMgNuMf7nbINFU=" \
+    --ml-operational-address gonka156zkjmlv6x225jzx99sf9dqj8pzn2wvr0tz9se \
+    --url "http://89.169.111.79:8000" \
+    --chain-id gonka-mainnet \
+    --node-id 6d6a6afcd26cd8f0c3d2222e84c28d6e043af7c0
+
+Output:
+Classic genesis transaction written to "/home/ubuntu/.inference/config/gentx/gentx-6d6a6afcd26cd8f0c3d2222e84c28d6e043af7c0.json"
+Genparticipant transaction written to "/home/ubuntu/.inference/config/genparticipant/genparticipant-6d6a6afcd26cd8f0c3d2222e84c28d6e043af7c0.json"
+"""
+
 if __name__ == "__main__":
     main()
