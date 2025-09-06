@@ -538,13 +538,17 @@ def setup_genesis_file():
     # Create destination directory if it doesn't exist
     dest_dir.mkdir(parents=True, exist_ok=True)
     
-    # Copy the genesis.json file
+    # Copy the genesis.json file using sudo cp to avoid permission issues
     print(f"Copying {source_genesis} to {dest_genesis}")
-    shutil.copy2(source_genesis, dest_genesis)
+    copy_result = os.system(f"sudo cp {source_genesis} {dest_genesis}")
+    if copy_result != 0:
+        raise RuntimeError(f"Failed to copy genesis.json file (exit code: {copy_result})")
     
     # Set permissions to 777
     print(f"Setting permissions on {dest_genesis}")
-    os.chmod(dest_genesis, 0o777)
+    chmod_result = os.system(f"sudo chmod 777 {dest_genesis}")
+    if chmod_result != 0:
+        raise RuntimeError(f"Failed to set permissions on genesis.json (exit code: {chmod_result})")
     
     print("Genesis.json setup completed successfully!")
 
