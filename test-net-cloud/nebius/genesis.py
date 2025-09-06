@@ -9,6 +9,15 @@ import re
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from dataclasses import dataclass
+
+
+@dataclass
+class AccountKey:
+    """Data class to hold account key information"""
+    address: str
+    pubkey: str
+    name: str
 
 
 BASE_DIR = Path(os.environ["HOME"]).absolute()
@@ -197,24 +206,38 @@ def create_account_key():
     print("Key details:")
     print(stdout)
     
-    # Extract the public key from the output
+    # Extract both address and pubkey from the output
+    full_output = stdout + stderr if stderr else stdout
     
-    # Look for the pubkey line in the output
-    pubkey_match = re.search(r"pubkey: '(.+?)'", stdout)
-    if pubkey_match:
-        pubkey_json = pubkey_match.group(1)
-        try:
-            pubkey_data = json.loads(pubkey_json)
-            public_key = pubkey_data.get("key", "")
-            if public_key:
-                print(f"Extracted public key: {public_key}")
-                return public_key
-            else:
-                raise ValueError("Could not extract key from pubkey JSON")
-        except json.JSONDecodeError:
-            raise ValueError("Could not parse pubkey JSON")
-    else:
+    # Extract address
+    address_match = re.search(r"address:\s*([a-z0-9]+)", full_output)
+    if not address_match:
+        raise ValueError("Could not find address in output")
+    address = address_match.group(1)
+    
+    # Extract pubkey
+    pubkey_match = re.search(r"pubkey: '(.+?)'", full_output)
+    if not pubkey_match:
         raise ValueError("Could not find pubkey in output")
+    
+    pubkey_json = pubkey_match.group(1)
+    try:
+        pubkey_data = json.loads(pubkey_json)
+        pubkey = pubkey_data.get("key", "")
+        if not pubkey:
+            raise ValueError("Could not extract key from pubkey JSON")
+    except json.JSONDecodeError:
+        raise ValueError("Could not parse pubkey JSON")
+    
+    # Extract name
+    name_match = re.search(r"name:\s*\"?([^\"]+)\"?", full_output)
+    name = name_match.group(1) if name_match else CONFIG_ENV["KEY_NAME"]
+    
+    print(f"Extracted address: {address}")
+    print(f"Extracted pubkey: {pubkey}")
+    print(f"Extracted name: {name}")
+    
+    return AccountKey(address=address, pubkey=pubkey, name=name)
 
 
 def create_config_env_file():
@@ -484,7 +507,7 @@ def get_or_create_warm_key(service="api"):
     raise ValueError("Failed to extract pubkey from warm key creation output")
 
 
-def add_genesis_account(cold_pubkey: str):
+def add_genesis_account(account_key: AccountKey):
     """Add genesis account using the cold key address"""
     working_dir = GONKA_REPO_DIR / "deploy/join"
     config_file = working_dir / "config.env"
@@ -495,12 +518,10 @@ def add_genesis_account(cold_pubkey: str):
     if not config_file.exists():
         raise FileNotFoundError(f"Config file not found: {config_file}")
     
-    # Get the cold account address from the earlier key creation
-    # We need to extract it from the account key creation output
-    print(f"Adding genesis account. cold_pubkey = {cold_pubkey}")
+    print(f"Adding genesis account for address: {account_key.address}")
     
     # Now run the genesis add-genesis-account command
-    genesis_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T node sh -lc \"inferenced genesis add-genesis-account {cold_pubkey} 1ngonka\"'"
+    genesis_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T node sh -lc \"inferenced genesis add-genesis-account {account_key.address} 1ngonka\"'"
     
     print("Running genesis add-genesis-account command...")
     genesis_result = subprocess.run(
@@ -543,8 +564,8 @@ def main():
     install_inferenced()
 
     # Create local 
-    cold_pubkey = create_account_key()
-    CONFIG_ENV["ACCOUNT_PUBKEY"] = cold_pubkey
+    account_key = create_account_key()
+    CONFIG_ENV["ACCOUNT_PUBKEY"] = account_key.pubkey
     create_config_env_file()
     
     # Clean up any containers that might have been started during setup
@@ -555,7 +576,7 @@ def main():
     run_genesis_initialization()
     extract_consensus_key()
     get_or_create_warm_key()
-    add_genesis_account(cold_pubkey)
+    add_genesis_account(account_key)
 
 
 if __name__ == "__main__":
