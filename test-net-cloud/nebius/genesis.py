@@ -1082,8 +1082,6 @@ def join_route(account_key: AccountKey):
     register_joining_participant()
     grant_key_permissions()
 
-    start_docker_services()
-
 
 def parse_arguments():
     """Parse command-line arguments"""
@@ -1175,7 +1173,10 @@ def main():
         else:
             raise ValueError("NODE_ID not found in CONFIG_ENV")
     else:
-        start_docker_services()
+        start_docker_services(
+            compose_files=["docker-compose.yml", "docker-compose.mlnode.yml"],
+            additional_args=["-d"]
+        )
 
 if __name__ == "__main__":
     main()
