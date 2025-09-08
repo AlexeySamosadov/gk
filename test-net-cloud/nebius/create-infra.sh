@@ -28,7 +28,7 @@ scp genesis.py ubuntu@89.169.111.79:/home/ubuntu/
 scp genesis.py testnet-1:/home/ubuntu/
 
 # Additional on-machine steps:
-sudo apt get update
+sudo apt-get update
 
 # Install huggingface-cli
 python3 -m venv ~/py-venv

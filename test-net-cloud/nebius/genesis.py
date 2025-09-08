@@ -37,7 +37,7 @@ INFERENCED_STATE_DIR = BASE_DIR / ".inference"
 
 CONFIG_ENV = {
     "KEY_NAME": "genesis", # TODO: allow to customize
-    "KEYRING_PASSWORD": "12345678", # TODO: allow to customize
+    "KEYRING_PASSWORD": "12345678",
     "API_PORT": "8000",
     "PUBLIC_URL": "http://89.169.111.79:8000", # TODO: allow to customize
     "P2P_EXTERNAL_ADDRESS": "tcp://89.169.111.79:5000", # TODO: allow to customize
@@ -953,10 +953,39 @@ def start_docker_services():
     print("All services are now running with the finalized genesis configuration.")
 
 
+def genesis_route(account_key: AccountKey, consensus_key: str, warm_key: AccountKey):
+    # Phase 3. GENTX and GENPARTICIPANT generation
+    # Setup genesis.json file for local gentx generation
+    setup_genesis_file()
+    # Generate gentx transaction
+    node_id = CONFIG_ENV.get("NODE_ID", "")
+    if not node_id:
+        raise ValueError("NODE_ID not found in CONFIG_ENV")
+    generate_gentx(account_key, consensus_key, node_id, warm_key.address)
+
+    # Phase 4. Genesis finalization
+    collect_genesis_transactions()
+    patch_genesis_participants()
+    copy_genesis_back_to_docker()
+
+    # Apply genesis overrides (includes denom_metadata and other configurations)
+    # FIXME: replace with path to checked in genesis-overrides.json
+    genesis_overrides_path = BASE_DIR / "genesis-overrides.json"
+    apply_genesis_overrides(genesis_overrides_path)
+
+    copy_final_genesis_to_repo()
+
+
+def join_route():
+    pass
+
+
 def main():
     if Path(os.getcwd()).absolute() != BASE_DIR:
         print(f"Changing directory to {BASE_DIR}")
         os.chdir(BASE_DIR)
+
+    is_genesis = True
 
     # Clean up any existing state
     docker_compose_down()  # Stop any running containers before cleanup
@@ -980,31 +1009,17 @@ def main():
     pull_images()
 
     # Phase 2. Genesis preparation
-    run_genesis_initialization()
+    if is_genesis:
+        run_genesis_initialization()
+        add_genesis_account(account_key)
+
     consensus_key = extract_consensus_key()
     warm_key = get_or_create_warm_key()
-    add_genesis_account(account_key)
-    
-    # Phase 3. GENTX and GENPARTICIPANT generation
-    # Setup genesis.json file for local gentx generation
-    setup_genesis_file()
-    # Generate gentx transaction
-    node_id = CONFIG_ENV.get("NODE_ID", "")
-    if not node_id:
-        raise ValueError("NODE_ID not found in CONFIG_ENV")
-    generate_gentx(account_key, consensus_key, node_id, warm_key.address)
-    
-    # Phase 4. Genesis finalization
-    collect_genesis_transactions()
-    patch_genesis_participants()
-    copy_genesis_back_to_docker()
-    
-    # Apply genesis overrides (includes denom_metadata and other configurations)
-    # FIXME: replace with path to checked in genesis-overrides.json
-    genesis_overrides_path = BASE_DIR / "genesis-overrides.json"
-    apply_genesis_overrides(genesis_overrides_path)
-    
-    copy_final_genesis_to_repo()
+
+    if is_genesis:
+        genesis_route(account_key, consensus_key, warm_key)
+    else:
+        join_route()
     
     # Phase 5. Start services
     start_docker_services()
