@@ -935,11 +935,18 @@ def copy_final_genesis_to_repo():
     print("Finalized genesis.json copied to repository successfully!")
 
 
-def register_joining_participant():
+def register_joining_participant(service="api"):
     """
-    Register this node as a new participant in the existing network
+    Register this node as a new participant in the existing network using Docker compose
     """
-    print("Registering joining participant...")
+    working_dir = GONKA_REPO_DIR / "deploy/join"
+    config_file = working_dir / "config.env"
+    
+    if not working_dir.exists():
+        raise FileNotFoundError(f"Working directory not found: {working_dir}")
+    
+    if not config_file.exists():
+        raise FileNotFoundError(f"Config file not found: {config_file}")
     
     # Get required configuration values
     public_url = CONFIG_ENV.get("PUBLIC_URL")
@@ -953,39 +960,36 @@ def register_joining_participant():
     if not seed_api_url:
         raise ValueError("SEED_API_URL not found in CONFIG_ENV")
     
-    # Build the command
-    cmd = [
-        str(INFERENCED_BINARY.path),
-        "register-new-participant",
-        public_url,
-        account_pubkey,
-        "--node-address", seed_api_url
-    ]
+    print(f"Registering joining participant using service: {service}")
     
-    print(f"Running command: {' '.join(cmd)}")
+    # Build the command to run inside the container
+    register_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T {service} sh -lc \"inferenced register-new-participant \\$PUBLIC_URL \\$ACCOUNT_PUBKEY --node-address \\$SEED_API_URL\"'"
     
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
-        print("Participant registration completed successfully!")
-        if result.stdout:
-            print("Output:")
-            print(result.stdout)
-        
-    except subprocess.CalledProcessError as e:
-        print(f"Participant registration failed with return code: {e.returncode}")
-        if e.stdout:
-            print("Output:")
-            print(e.stdout)
-        if e.stderr:
-            print("Error:")
-            print(e.stderr)
-        raise
+    print(f"Running command: {register_cmd}")
+    
+    result = subprocess.run(
+        register_cmd,
+        shell=True,
+        cwd=working_dir,
+        capture_output=True,
+        text=True
+    )
+    
+    print("Participant registration completed!")
+    print("Output:")
+    print("=" * 50)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print("Errors/Warnings:")
+        print(result.stderr)
+    print("=" * 50)
+    
+    if result.returncode != 0:
+        print(f"Participant registration failed with return code: {result.returncode}")
+        raise subprocess.CalledProcessError(result.returncode, register_cmd)
+    
+    print("Participant registration completed successfully!")
 
 
 def grant_key_permissions(warm_key_address: str):
