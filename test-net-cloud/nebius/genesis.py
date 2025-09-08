@@ -835,6 +835,76 @@ def copy_genesis_back_to_docker():
     print("Genesis.json copied back to Docker container successfully!")
 
 
+def add_denom_metadata_to_genesis():
+    """Add denom_metadata to genesis.json preserving structure and formatting"""
+    print("Adding denom_metadata to genesis.json...")
+    
+    genesis_file = INFERENCED_STATE_DIR / "config/genesis.json"
+    
+    if not genesis_file.exists():
+        raise FileNotFoundError(f"Genesis file not found at {genesis_file}")
+    
+    # Read the genesis.json file
+    with open(genesis_file, 'r') as f:
+        genesis_data = json.load(f)
+    
+    # Define the denom_metadata
+    denom_metadata = [
+        {
+            "description": "Coins for the Gonka network.",
+            "denom_units": [
+                {
+                    "denom": "ngonka",
+                    "exponent": 0,
+                    "aliases": [
+                        "nanogonka"
+                    ]
+                },
+                {
+                    "denom": "ugonka",
+                    "exponent": 3,
+                    "aliases": [
+                        "microgonka"
+                    ]
+                },
+                {
+                    "denom": "mgonka",
+                    "exponent": 6,
+                    "aliases": [
+                        "milligonka"
+                    ]
+                },
+                {
+                    "denom": "gonka",
+                    "exponent": 9,
+                    "aliases": []
+                }
+            ],
+            "base": "ngonka",
+            "display": "ngonka",
+            "name": "Gonka",
+            "symbol": "GNK",
+            "uri": "",
+            "uri_hash": ""
+        }
+    ]
+    
+    # Ensure app_state.bank exists
+    if "app_state" not in genesis_data:
+        genesis_data["app_state"] = {}
+    if "bank" not in genesis_data["app_state"]:
+        genesis_data["app_state"]["bank"] = {}
+    
+    # Add denom_metadata to app_state.bank
+    genesis_data["app_state"]["bank"]["denom_metadata"] = denom_metadata
+    
+    # Write back to file with proper formatting
+    with open(genesis_file, 'w') as f:
+        json.dump(genesis_data, f, indent=2, separators=(',', ': '))
+    
+    print("Denom metadata added to genesis.json successfully!")
+
+
 def copy_final_genesis_to_repo():
     """Copy the finalized genesis.json to the genesis/ directory in the repo"""
     print("Copying finalized genesis.json to repository genesis/ directory...")
@@ -959,6 +1029,7 @@ def main():
     collect_genesis_transactions()
     patch_genesis_participants()
     copy_genesis_back_to_docker()
+    add_denom_metadata_to_genesis()
     copy_final_genesis_to_repo()
     
     # Phase 5. Start services
