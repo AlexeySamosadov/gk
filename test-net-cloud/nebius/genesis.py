@@ -835,74 +835,43 @@ def copy_genesis_back_to_docker():
     print("Genesis.json copied back to Docker container successfully!")
 
 
-def add_denom_metadata_to_genesis():
-    """Add denom_metadata to genesis.json preserving structure and formatting"""
-    print("Adding denom_metadata to genesis.json...")
+def apply_genesis_overrides(overrides_file_path):
+    """Apply genesis overrides from a JSON file, merging them into genesis.json"""
+    print(f"Applying genesis overrides from {overrides_file_path}...")
     
     genesis_file = INFERENCED_STATE_DIR / "config/genesis.json"
     
     if not genesis_file.exists():
         raise FileNotFoundError(f"Genesis file not found at {genesis_file}")
     
+    if not Path(overrides_file_path).exists():
+        raise FileNotFoundError(f"Overrides file not found at {overrides_file_path}")
+    
     # Read the genesis.json file
     with open(genesis_file, 'r') as f:
         genesis_data = json.load(f)
     
-    # Define the denom_metadata
-    denom_metadata = [
-        {
-            "description": "Coins for the Gonka network.",
-            "denom_units": [
-                {
-                    "denom": "ngonka",
-                    "exponent": 0,
-                    "aliases": [
-                        "nanogonka"
-                    ]
-                },
-                {
-                    "denom": "ugonka",
-                    "exponent": 3,
-                    "aliases": [
-                        "microgonka"
-                    ]
-                },
-                {
-                    "denom": "mgonka",
-                    "exponent": 6,
-                    "aliases": [
-                        "milligonka"
-                    ]
-                },
-                {
-                    "denom": "gonka",
-                    "exponent": 9,
-                    "aliases": []
-                }
-            ],
-            "base": "ngonka",
-            "display": "ngonka",
-            "name": "Gonka",
-            "symbol": "GNK",
-            "uri": "",
-            "uri_hash": ""
-        }
-    ]
+    # Read the overrides file
+    with open(overrides_file_path, 'r') as f:
+        overrides_data = json.load(f)
     
-    # Ensure app_state.bank exists
-    if "app_state" not in genesis_data:
-        genesis_data["app_state"] = {}
-    if "bank" not in genesis_data["app_state"]:
-        genesis_data["app_state"]["bank"] = {}
+    # Merge the overrides into genesis data (deep merge)
+    def deep_merge(target, source):
+        """Deep merge source into target"""
+        for key, value in source.items():
+            if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+                deep_merge(target[key], value)
+            else:
+                target[key] = value
     
-    # Add denom_metadata to app_state.bank
-    genesis_data["app_state"]["bank"]["denom_metadata"] = denom_metadata
+    # Apply the overrides
+    deep_merge(genesis_data, overrides_data)
     
     # Write back to file with proper formatting
     with open(genesis_file, 'w') as f:
         json.dump(genesis_data, f, indent=2, separators=(',', ': '))
     
-    print("Denom metadata added to genesis.json successfully!")
+    print(f"Genesis overrides applied successfully from {overrides_file_path}!")
 
 
 def copy_final_genesis_to_repo():
@@ -1029,7 +998,11 @@ def main():
     collect_genesis_transactions()
     patch_genesis_participants()
     copy_genesis_back_to_docker()
-    add_denom_metadata_to_genesis()
+    
+    # Apply genesis overrides (includes denom_metadata and other configurations)
+    genesis_overrides_path = GONKA_REPO_DIR / "genesis/genesis-overrides.json"
+    apply_genesis_overrides(genesis_overrides_path)
+    
     copy_final_genesis_to_repo()
     
     # Phase 5. Start services
