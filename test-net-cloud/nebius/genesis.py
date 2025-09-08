@@ -944,14 +944,14 @@ def register_joining_participant():
     # Get required configuration values
     public_url = CONFIG_ENV.get("PUBLIC_URL")
     account_pubkey = CONFIG_ENV.get("ACCOUNT_PUBKEY")
-    seed_api_url = CONFIG_ENV.get("DAPI_CHAIN_NODE__SEED_API_URL")
+    seed_api_url = CONFIG_ENV.get("SEED_API_URL")
     
     if not public_url:
         raise ValueError("PUBLIC_URL not found in CONFIG_ENV")
     if not account_pubkey:
         raise ValueError("ACCOUNT_PUBKEY not found in CONFIG_ENV")
     if not seed_api_url:
-        raise ValueError("DAPI_CHAIN_NODE__SEED_API_URL not found in CONFIG_ENV")
+        raise ValueError("SEED_API_URL not found in CONFIG_ENV")
     
     # Build the command
     cmd = [
@@ -998,11 +998,11 @@ def grant_key_permissions(warm_key_address: str):
     print("Granting ML operations permissions...")
     
     # Get required configuration values
-    seed_api_url = CONFIG_ENV.get("DAPI_CHAIN_NODE__SEED_API_URL")
+    seed_api_url = CONFIG_ENV.get("SEED_API_URL")
     keyring_password = CONFIG_ENV.get("KEYRING_PASSWORD")
     
     if not seed_api_url:
-        raise ValueError("DAPI_CHAIN_NODE__SEED_API_URL not found in CONFIG_ENV")
+        raise ValueError("SEED_API_URL not found in CONFIG_ENV")
     if not keyring_password:
         raise ValueError("KEYRING_PASSWORD not found in CONFIG_ENV")
     
