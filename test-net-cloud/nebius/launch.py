@@ -1222,20 +1222,20 @@ def parse_arguments():
         epilog="""
 Examples:
   # Run in genesis mode (default)
-  python genesis.py
-  python genesis.py --mode genesis
+  python launch.py
+  python launch.py --mode genesis
   
   # Run in join mode
-  python genesis.py --mode join
+  python launch.py --mode join
   
   # Use specific branch
-  python genesis.py --branch nebius-test-net
-  python genesis.py --mode join --branch develop
+  python launch.py --branch nebius-test-net
+  python launch.py --mode join --branch develop
   
   # Override configuration via environment variables
   export KEY_NAME="my-validator"
   export PUBLIC_URL="http://my-server.com:8000"
-  python genesis.py --mode genesis --branch nebius-test-net
+  python launch.py --mode genesis --branch nebius-test-net
         """
     )
     
