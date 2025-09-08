@@ -139,12 +139,37 @@ def docker_compose_down():
         print("Deploy directory doesn't exist, skipping Docker cleanup")
 
 
-def clone_repo():
+def clone_repo(branch="main"):
     if not GONKA_REPO_DIR.exists():
         print(f"Cloning {GONKA_REPO_DIR}")
         os.system(f"git clone https://github.com/gonka-ai/gonka.git {GONKA_REPO_DIR}")
+        
+        # Switch to the specified branch
+        print(f"Switching to branch: {branch}")
+        checkout_cmd = f"cd {GONKA_REPO_DIR} && git checkout {branch}"
+        result = os.system(checkout_cmd)
+        if result != 0:
+            print(f"Warning: Failed to checkout branch {branch} (exit code: {result})")
+            print("Continuing with the default branch...")
+        else:
+            print(f"Successfully switched to branch: {branch}")
     else:
         print(f"{GONKA_REPO_DIR} already exists")
+        # Check if we need to switch branches
+        current_branch_cmd = f"cd {GONKA_REPO_DIR} && git branch --show-current"
+        current_branch = subprocess.run(current_branch_cmd, shell=True, capture_output=True, text=True)
+        if current_branch.returncode == 0:
+            current_branch_name = current_branch.stdout.strip()
+            if current_branch_name != branch:
+                print(f"Current branch is {current_branch_name}, switching to {branch}")
+                switch_cmd = f"cd {GONKA_REPO_DIR} && git checkout {branch}"
+                result = os.system(switch_cmd)
+                if result != 0:
+                    print(f"Warning: Failed to switch to branch {branch} (exit code: {result})")
+                else:
+                    print(f"Successfully switched to branch: {branch}")
+            else:
+                print(f"Already on branch: {branch}")
 
 
 def clean_genesis_validators():
@@ -1203,10 +1228,14 @@ Examples:
   # Run in join mode
   python genesis.py --mode join
   
+  # Use specific branch
+  python genesis.py --branch nebius-test-net
+  python genesis.py --mode join --branch develop
+  
   # Override configuration via environment variables
   export KEY_NAME="my-validator"
   export PUBLIC_URL="http://my-server.com:8000"
-  python genesis.py --mode genesis
+  python genesis.py --mode genesis --branch nebius-test-net
         """
     )
     
@@ -1221,6 +1250,12 @@ Examples:
         "--verbose", "-v",
         action="store_true",
         help="Enable verbose output"
+    )
+    
+    parser.add_argument(
+        "--branch", "-b",
+        default="main",
+        help="Git branch to checkout after cloning (default: main)"
     )
     
     return parser.parse_args()
@@ -1246,7 +1281,7 @@ def main():
     clean_state()
     
     # Set up fresh environment
-    clone_repo()
+    clone_repo(args.branch)
     clean_genesis_validators()
     create_state_dirs()
     install_inferenced()
