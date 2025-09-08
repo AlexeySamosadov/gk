@@ -1072,6 +1072,13 @@ def genesis_route(account_key: AccountKey):
 
 def join_route(account_key: AccountKey):
     print("\n=== JOIN MODE: Joining existing network ===")
+    start_docker_services(
+        compose_files=["docker-compose.yml"],
+        services=["tmkms", "node"],
+        additional_args=["-d", "--no-deps"]
+    )
+    print("Waiting 15 seconds for node to start...")
+    time.sleep(15)
     register_joining_participant()
     start_docker_services()
 
@@ -1164,7 +1171,7 @@ def main():
                 compose_files=["docker-compose.yml", "docker-compose.mlnode.yml", "docker-compose.runtime-override.yml"]
             )
         else:
-            start_docker_services()
+            raise ValueError("NODE_ID not found in CONFIG_ENV")
     else:
         start_docker_services()
 
