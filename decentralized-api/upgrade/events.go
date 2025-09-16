@@ -115,27 +115,24 @@ func checkForFullUpgradesScheduled(transactionRecorder cosmosclient.InferenceCos
 func checkForVersionSwitch(configManager *apiconfig.ConfigManager) {
 	upgradePlan := configManager.GetUpgradePlan()
 
-	if upgradePlan.Name == "" {
-		logging.Warn("checkForVersionSwitch. Websocket closed with no upgrade (name is empty)", types.Upgrades)
+	if upgradePlan.Name == "" || upgradePlan.NodeVersion == "" {
+		logging.Debug("checkForVersionSwitch. name or node version is empty", types.Upgrades, "upgradePlan", upgradePlan)
 		return
 	}
 
 	if configManager.GetHeight() >= upgradePlan.Height-1 {
-		if upgradePlan.NodeVersion != "" {
-			oldVersion := configManager.GetCurrentNodeVersion()
-			if upgradePlan.NodeVersion != oldVersion {
-				err := configManager.SetCurrentNodeVersion(upgradePlan.NodeVersion)
-				if err != nil {
-					logging.Error("checkForVersionSwitch. Failed to update MLNode version in config", types.Upgrades, "error", err)
-					return
-				}
-				logging.Info("MLNode version updated during upgrade using known target version", types.Upgrades, "oldVersion", oldVersion, "newVersion", upgradePlan.NodeVersion)
-				if len(upgradePlan.Binaries) == 0 {
-					configManager.ClearUpgradePlan()
-				}
+		logging.Info("checkForVersionSwitch. height reached for upgrade", types.Upgrades, "nodeVersion", upgradePlan.NodeVersion, "upgradeHeight", upgradePlan.Height)
+		oldVersion := configManager.GetCurrentNodeVersion()
+		if upgradePlan.NodeVersion != oldVersion {
+			err := configManager.SetCurrentNodeVersion(upgradePlan.NodeVersion)
+			if err != nil {
+				logging.Error("checkForVersionSwitch. Failed to update MLNode version in config", types.Upgrades, "error", err)
+				return
 			}
-		} else {
-			logging.Warn("No NodeVersion specified in upgrade plan", types.Upgrades, "upgradeName", upgradePlan.Name)
+			logging.Info("MLNode version updated during upgrade using known target version", types.Upgrades, "oldVersion", oldVersion, "newVersion", upgradePlan.NodeVersion)
+			if len(upgradePlan.Binaries) == 0 {
+				configManager.ClearUpgradePlan()
+			}
 		}
 	}
 }
