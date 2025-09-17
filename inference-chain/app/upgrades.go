@@ -39,5 +39,5 @@ func (app *App) setupUpgradeHandlers() {
 	}
 	app.Logger().Info("Applying upgrade", "upgradeInfo", upgradeInfo)
 
-	app.UpgradeKeeper.SetUpgradeHandler(v0_2_2.UpgradeName+"-alpha1", v0_2_2.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
+	app.UpgradeKeeper.SetUpgradeHandler(v0_2_2.UpgradeName, v0_2_2.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
 }
