@@ -200,7 +200,7 @@ func QueryActiveParticipants(rpcClient *rpcclient.HTTP, queryClient types.QueryC
 	}
 }
 
-func GetParticipantsProof(rpcClient *rpcclient.HTTP, epochId uint64, height int64) (*types.ProofOps, error) {
+func GetParticipantsMerkleProof(rpcClient *rpcclient.HTTP, epochId uint64, height int64) (*types.ProofOps, error) {
 	dataKey := types.ActiveParticipantsFullKey(epochId)
 
 	result, err := cosmos_client.QueryByKeyWithOptions(rpcClient, "inference", dataKey, height, true)

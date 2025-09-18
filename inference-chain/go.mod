@@ -37,7 +37,7 @@ require (
 	github.com/cosmos/ibc-go/modules/capability v1.0.0
 	github.com/cosmos/ibc-go/v8 v8.2.0
 	github.com/golang/protobuf v1.5.4
-	github.com/gonka-ai/gonka-utils/go v0.0.0-20250913125040-6a1b1311ec23
+	github.com/gonka-ai/gonka-utils/go v0.0.0-20250917223316-7583c27b562a
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0

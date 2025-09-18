@@ -280,29 +280,32 @@ func (d *OnNewBlockDispatcher) ProcessNewBlock(ctx context.Context, blockInfo ch
 	return nil
 }
 
+// verifyParticipantsChain verifies participants from current epoch to genesis epoch (or to latest known verified epoch) backwards
+// using proof stored on-chain
+// runs if verification is on AND if blocks coming with gaps (1.. 4... 8.. etc)
 func (d *OnNewBlockDispatcher) verifyParticipantsChain(ctx context.Context, curHeight int64, knownHeight int64) {
-	logging.Info("verify participants", types.System, "known_height", knownHeight, "current_height", curHeight, "last_verified_app_hash", d.lastVerifiedAppHashHex)
+	logging.Debug("verify participants", types.ParticipantsVerification, "known_height", knownHeight, "current_height", curHeight, "last_verified_app_hash", d.lastVerifiedAppHashHex)
 
 	if d.lastVerifiedAppHashHex != "" && knownHeight != curHeight-1 {
-		logging.Info("verify participants: start", types.System, "lastVerifiedAppHashHex", d.lastVerifiedAppHashHex)
+		logging.Info("verify participants: start", types.ParticipantsVerification, "lastVerifiedAppHashHex", d.lastVerifiedAppHashHex)
 
 		rpcClient, err := cosmosclient.NewRpcClient(d.configManager.GetChainNodeConfig().Url)
 		if err != nil {
-			logging.Error("Failed to create rpc client", types.System, "error", err)
+			logging.Error("Failed to create rpc client", types.ParticipantsVerification, "error", err)
 			return
 		}
 
 		currEpoch, err := d.queryClient.GetCurrentEpoch(ctx, &types.QueryGetCurrentEpochRequest{})
 		if err != nil {
-			logging.Error("Failed to get current epoch", types.Participants, "error", err)
+			logging.Error("Failed to get current epoch", types.ParticipantsVerification, "error", err)
 			return
 		}
 
-		logging.Info("Current epoch resolved.", types.Participants, "epoch", currEpoch.Epoch)
+		logging.Info("Current epoch resolved.", types.ParticipantsVerification, "epoch", currEpoch.Epoch)
 
 		data, err := utils.QueryActiveParticipants(rpcClient, d.transactionRecorder.NewInferenceQueryClient())(ctx, "current")
 		if err != nil {
-			logging.Error("Failed to get current participants data", types.Participants, "error", err)
+			logging.Error("Failed to get current participants data", types.ParticipantsVerification, "error", err)
 			return
 		}
 
@@ -316,38 +319,38 @@ func (d *OnNewBlockDispatcher) verifyParticipantsChain(ctx context.Context, curH
 	}
 }
 
+// Creates proof for genesis block. Is called only ones and only on genesis node
 func (el *OnNewBlockDispatcher) collectGenesisBlockProof() error {
 	if !el.configManager.GetChainNodeConfig().IsGenesis || el.isGenesisBlockProcessed {
 		return nil
 	}
-
-	logging.Info("collectGenesisBlockProof", types.EventProcessing)
-
 	rpcClient, err := cosmosclient.NewRpcClient(el.configManager.GetChainNodeConfig().Url)
 	if err != nil {
-		logging.Error("EventListener: Failed to create rpc client", types.System, "error", err)
+		logging.Error("Failed to create rpc client", types.ParticipantsVerification, "error", err)
 		return err
 	}
 
-	// genesis block data is in block with height=2
+	// genesis block data is in block header with height=2
 	genesisBlockResultsHeight := int64(2)
 	block, err := rpcClient.Block(context.Background(), &genesisBlockResultsHeight)
 	if err != nil {
-		logging.Error("EventListener: Failed to get genesis block", types.System, "error", err)
+		logging.Error("Failed to get genesis block", types.ParticipantsVerification, "error", err)
 	}
 
-	proof := fillValidatorsProof(chainevents.LastCommit{
+	proof, err := fillValidatorsProof(chainevents.LastCommit{
 		BlockId:    block.Block.LastCommit.BlockID,
 		Height:     fmt.Sprintf("%v", block.Block.LastCommit.Height),
 		Round:      int(block.Block.LastCommit.Round),
 		Signatures: block.Block.LastCommit.Signatures,
 	})
+	if err != nil {
+		return err
+	}
 
-	// we do not collect proof here, because cosmos can't get merkle proof for block_height <= 1
+	// we do not collect participants merkle proof here, because cosmos can't get merkle proof for block_height <= 1
 	if err := el.transactionRecorder.SubmitActiveParticipantsPendingProof(
 		&types.MsgSubmitParticipantsProof{BlockHeight: uint64(1), ValidatorsProof: proof}); err != nil {
-		// TODO think later what to do if error is critical
-		logging.Error("Failed to set validators proof", types.System, "error", err)
+		logging.Error("Failed to set validators proof", types.ParticipantsVerification, "error", err)
 	}
 	el.isGenesisBlockProcessed = true
 	return nil
@@ -450,16 +453,20 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 	}
 }
 
+// collectBlockProofs creates proofs for blocks, which active_participants_set was created in
+// It gets validators signatures and participants merkle proof and stores it on-chain
 func (el *OnNewBlockDispatcher) collectBlockProofs(block chainevents.FinalizedBlock) {
 	height, err := strconv.ParseInt(block.Block.LastCommit.Height, 10, 64)
 	if err != nil {
-		logging.Error("Failed to parse block height to int", types.System, "height", block.Block.LastCommit.Height, "error", err)
+		logging.Error("Failed to parse block height to int", types.ParticipantsVerification, "height", block.Block.LastCommit.Height, "error", err)
 		return
 	}
-	logging.Info("collectBlockProofs: check if proof pending", types.System, "height", block.Block.LastCommit.Height)
+
+	logging.Debug("Check if proof pending", types.ParticipantsVerification, "height", height)
+
 	pendingProofResp, err := el.transactionRecorder.NewInferenceQueryClient().IfProofPending(context.Background(), &types.QueryIsProofPendingRequest{ProofHeight: height})
 	if err != nil {
-		logging.Error("Failed to check if proof is pending", types.System, "height", block.Block.LastCommit.Height, "error", err)
+		logging.Error("Failed to check if proof is pending", types.ParticipantsVerification, "height", height, "error", err)
 		return
 	}
 
@@ -467,28 +474,30 @@ func (el *OnNewBlockDispatcher) collectBlockProofs(block chainevents.FinalizedBl
 		return
 	}
 
-	logging.Info("collecting pending proof", types.System, "height", height)
+	logging.Info("Collecting pending proof", types.ParticipantsVerification, "height", height)
 
 	rpcClient, err := cosmosclient.NewRpcClient(el.configManager.GetChainNodeConfig().Url)
 	if err != nil {
-		logging.Error("Failed to create rpc client", types.System, "error", err)
+		logging.Error("Failed to create rpc client", types.ParticipantsVerification, "error", err)
 		return
 	}
 
-	proofOps, err := utils.GetParticipantsProof(rpcClient, pendingProofResp.PendingProofEpochId, height)
+	proofOps, err := utils.GetParticipantsMerkleProof(rpcClient, pendingProofResp.PendingProofEpochId, height)
 	if err != nil {
-		logging.Error("EventListener: Failed to get participants proof", types.System, "error", err)
+		logging.Error("Failed to get participants merkle proof", types.ParticipantsVerification, "error", err)
 	}
 
-	proof := fillValidatorsProof(block.Block.LastCommit)
+	proof, err := fillValidatorsProof(block.Block.LastCommit)
+	if err != nil {
+		return
+	}
 	if err := el.transactionRecorder.SubmitActiveParticipantsPendingProof(
 		&types.MsgSubmitParticipantsProof{
 			BlockHeight:     uint64(height),
 			ValidatorsProof: proof,
 			ProofOpts:       proofOps,
 		}); err != nil {
-		// TODO: think later what to do if error is critical
-		logging.Error("Failed to set validators proof", types.System, "error", err)
+		logging.Error("Failed to set validators proof", types.ParticipantsVerification, "error", err)
 	}
 }
 

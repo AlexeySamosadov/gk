@@ -2,9 +2,9 @@ package v1_19
 
 import (
 	"context"
-	"fmt"
-
 	upgradetypes "cosmossdk.io/x/upgrade/types"
+	"fmt"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/productscience/inference/x/inference/keeper"
 	"github.com/productscience/inference/x/inference/types"
@@ -13,7 +13,7 @@ import (
 var activeParticipantsEpoch0Test = types.ActiveParticipants{
 	Participants: []*types.ActiveParticipant{
 		{
-			ValidatorKey: "CypA77V8m8UTBLJgz4F8wN0E3Y8rcIZScPV5X422y9U=",
+			ValidatorKey: "PuYOFVca5QxTzmMhQjXLEd4EugVb9mniLilliwJ1no4=",
 		},
 	},
 	PocStartBlockHeight:  1,
@@ -74,7 +74,9 @@ var activeParticipantsEpoch0Mainnet = types.ActiveParticipants{
 		},
 		// this participant wasn't included as active participant for epoch 1
 		// so there is no available data except of validator (consensus) key on chain for epoch 0
-		{ValidatorKey: "2ykmApZ4pfSMfoREBUDu/vImEYlOym8ymVWOw2wcMQo="},
+		{
+			ValidatorKey: "2ykmApZ4pfSMfoREBUDu/vImEYlOym8ymVWOw2wcMQo=",
+		},
 		{
 			Index:        "gonka1d7p03cu2y2yt3vytq9wlfm6tlz0lfhlgv9h82p",
 			ValidatorKey: "5QYFI0kdyBPrcld3FfOwoZdynfwN5li0qUbg3zwFK4I=",
@@ -107,7 +109,14 @@ func CreateUpgradeHandler(
 		}
 		fmt.Printf("OrderMigrations: %v\n", mm.OrderMigrations)
 
-		k.SetActiveParticipants(ctx, activeParticipantsEpoch0Test)
+		configurator.RegisterMigration(types.ModuleName, 4, func(ctx sdk.Context) error {
+			k.SetActiveParticipants(ctx, activeParticipantsEpoch0Test)
+			return nil
+		})
+		if _, ok := vm["capability"]; !ok {
+			vm["capability"] = mm.Modules["capability"].(module.HasConsensusVersion).ConsensusVersion()
+		}
+
 		return mm.RunMigrations(ctx, configurator, vm)
 	}
 }

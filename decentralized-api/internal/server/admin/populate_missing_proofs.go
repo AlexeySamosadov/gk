@@ -7,7 +7,6 @@ import (
 	"decentralized-api/logging"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	rpcclient "github.com/cometbft/cometbft/rpc/client/http"
 	coretypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -43,7 +42,7 @@ func fillDataForUpgrade(
 	archiveNodeEndpoint string, startFromEpoch uint64) error {
 	archiveClient, err := rpcclient.New(archiveNodeEndpoint, "/websocket")
 	if err != nil {
-		logging.Error("FillDataForUpgrade: failed create rpc client for archive node", types.System, "err", err)
+		logging.Error("failed create rpc client for archive node", types.ParticipantsVerification, "err", err)
 		return err
 	}
 
@@ -52,10 +51,10 @@ func fillDataForUpgrade(
 	queryClient := transactionRecorder.NewInferenceQueryClient()
 	currEpoch, err := queryClient.GetCurrentEpoch(ctx, &types.QueryGetCurrentEpochRequest{})
 	if err != nil {
-		logging.Error("FillDataForUpgrade: Failed to get current epoch", types.System, "error", err)
+		logging.Error("failed to get current epoch", types.ParticipantsVerification, "error", err)
 		return err
 	}
-	logging.Info("FillDataForUpgrade: Current epoch resolved.", types.System, "epoch", currEpoch.Epoch)
+	logging.Info("current epoch resolved.", types.ParticipantsVerification, "epoch", currEpoch.Epoch)
 	currentEpochId := currEpoch.Epoch
 
 	if startFromEpoch > currentEpochId+1 {
@@ -66,7 +65,7 @@ func fillDataForUpgrade(
 		dataKey := types.ActiveParticipantsFullKey(epochId)
 		result, err := cosmosclient.QueryByKey(archiveClient, "inference", dataKey)
 		if err != nil {
-			logging.Error("FillDataForUpgrade: Failed to query active participants", types.Participants, "epoch_id", epochId, "err", err)
+			logging.Error("failed to query active participants", types.ParticipantsVerification, "epoch_id", epochId, "err", err)
 			return err
 		}
 
@@ -76,7 +75,7 @@ func fillDataForUpgrade(
 
 		var activeParticipants types.ActiveParticipants
 		if err := cdc.Unmarshal(result.Response.Value, &activeParticipants); err != nil {
-			logging.Error("FillDataForUpgrade: Failed to unmarshal active participants. Req 1", types.Participants, "error", err)
+			logging.Error("failed to unmarshal active participants. Req 1", types.ParticipantsVerification, "error", err)
 			return err
 		}
 
@@ -84,21 +83,21 @@ func fillDataForUpgrade(
 		nextBlockHeight := activeParticipants.CreatedAtBlockHeight + 2
 		proofBlock, err := archiveClient.Block(ctx, &proofBlockHeight)
 		if err != nil {
-			logging.Error("FillDataForUpgrade: failed get archive block", types.System, "height", proofBlockHeight, "err", err)
+			logging.Error("failed get archive block", types.ParticipantsVerification, "height", proofBlockHeight, "err", err)
 			return err
 		}
 
 		nextBlock, err := archiveClient.Block(ctx, &nextBlockHeight)
 		if err != nil {
-			logging.Error("FillDataForUpgrade: failed get archive block", types.System, "height", nextBlockHeight, "err", err)
+			logging.Error("failed get archive block", types.ParticipantsVerification, "height", nextBlockHeight, "err", err)
 			return err
 		}
 
 		var proofOps *types.ProofOps
 		if epochId != 0 {
-			proofOps, err = utils.GetParticipantsProof(archiveClient, epochId, activeParticipants.CreatedAtBlockHeight)
+			proofOps, err = utils.GetParticipantsMerkleProof(archiveClient, epochId, activeParticipants.CreatedAtBlockHeight)
 			if err != nil {
-				logging.Error("FillDataForUpgrade: failed get proof ops", types.System, "height", activeParticipants.CreatedAtBlockHeight, "err", err)
+				logging.Error("failed get proof ops", types.ParticipantsVerification, "height", activeParticipants.CreatedAtBlockHeight, "err", err)
 				return err
 			}
 		}
@@ -109,7 +108,6 @@ func fillDataForUpgrade(
 			PartSetHeaderHash:  proofBlock.Block.Header.LastBlockID.PartSetHeader.Hash.String(),
 		}
 
-		fmt.Printf("FillDataForUpgrade: proofBlockId: %+v\n", proofBlockId)
 		header := types.BlockHeaderFull{
 			Version:            int64(proofBlock.Block.Version.Block),
 			ChainId:            proofBlock.Block.ChainID,
@@ -127,17 +125,13 @@ func fillDataForUpgrade(
 			ProposerAddress:    proofBlock.Block.Header.ProposerAddress,
 		}
 
-		fmt.Printf("FillDataForUpgrade: header: %+v\n", header)
-
 		currentValidatorsProof := createValidatorsProofFromBlock(proofBlockId, proofBlock.Block.LastCommit)
-		fmt.Printf("FillDataForUpgrade: currentValidatorsProof: %+v\n", currentValidatorsProof)
 
 		nextValidatorsProof := createValidatorsProofFromBlock(&types.BlockID{
 			Hash:               nextBlock.Block.Header.LastBlockID.Hash.String(),
 			PartSetHeaderTotal: int64(nextBlock.Block.Header.LastBlockID.PartSetHeader.Total),
 			PartSetHeaderHash:  nextBlock.Block.Header.LastBlockID.PartSetHeader.Hash.String(),
 		}, nextBlock.Block.LastCommit)
-		fmt.Printf("FillDataForUpgrade: nextValidatorsProof: %+v\n", nextValidatorsProof)
 
 		tx := &types.MsgSubmitActiveParticipantsProofData{
 			BlockHeight:                 uint64(activeParticipants.CreatedAtBlockHeight),

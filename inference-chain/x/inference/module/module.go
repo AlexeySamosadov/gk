@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -183,15 +182,19 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	currentHeight := sdkCtx.BlockHeight()
-	am.LogDebug("BeginBlock: current height", types.System, "block height", currentHeight)
+	am.createBlockProof(sdkCtx, ctx, currentHeight)
+	return nil
+}
+
+func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, currentHeight int64) {
 	if currentHeight <= 0 {
-		return nil
+		return
 	}
 
 	target := currentHeight - 1
 	upcomingEpochId, found := am.keeper.GetPendingProof(ctx, target)
 	if !found {
-		return nil
+		return
 	}
 
 	header := sdkCtx.BlockHeader()
@@ -199,31 +202,32 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 	voteInfos := sdkCtx.VoteInfos()
 
 	var (
-		totalPower  int64
-		signedPower int64
+		totalPower       int64
+		prevParticipants types.ActiveParticipants
 	)
-
-	var prevParticipants types.ActiveParticipants
 
 	// new participants set is created in the end of CURRENT epoch
 	// current participants set will be PREVIOUS set for upcoming epoch
 	if target == 1 {
+		// genesis epoch, no previous participants
 		prevParticipants, found = am.keeper.GetActiveParticipants(ctx, 0)
 		if !found {
-			return errors.New("active participants not found for epoch 0, restart chain")
+			am.LogDebug("active participants not found for epoch 0", types.ParticipantsVerification, "epoch", 0)
+			return
 		}
-		am.LogInfo("BeginBlock: found participants for epoch", types.Participants, "epoch", 0)
+		am.LogDebug("found participants for epoch", types.ParticipantsVerification, "epoch", 0)
 	} else {
 		epochIndex, found := am.keeper.GetEffectiveEpochIndex(ctx)
 		if found {
-			am.LogInfo("BeginBlock: found epoch", types.Participants, "epoch", epochIndex)
+			am.LogInfo("found epoch", types.ParticipantsVerification, "epoch", epochIndex)
 			prevParticipants, found = am.keeper.GetActiveParticipants(ctx, epochIndex)
 			if found {
-				am.LogInfo("BeginBlock: found participants for epoch", types.Participants, "epoch", epochIndex)
+				am.LogInfo("found participants for epoch", types.ParticipantsVerification, "epoch", epochIndex)
 			}
 		}
 	}
 
+	// get validator's consensus key and voting power and match with known participants by validator (consensus) key
 	commits := make([]*types.CommitInfo, 0, len(voteInfos))
 	type data struct {
 		pk     ed25519.PubKey
@@ -233,25 +237,24 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 	vals := make(map[string]data)
 	for _, v := range prevParticipants.Participants {
 		if v.ValidatorKey == "" {
-			am.LogWarn("validator cons pub key is empty", types.Participants)
+			am.LogWarn("validator cons pub key is empty", types.ParticipantsVerification)
 			continue
 		}
 
 		keyBytes, err := base64.StdEncoding.DecodeString(v.ValidatorKey)
 		if err != nil {
-			am.LogError("Failed to unpack cons pub key", types.Participants, "error", err)
+			am.LogError("Failed to unpack cons pub key", types.ParticipantsVerification, "error", err)
 			continue
 		}
 		pk := ed25519.PubKey(keyBytes)
 		if len(keyBytes) != ed25519.PubKeySize {
-			am.LogError("Invalid ed25519 pubkey length from participants", types.Participants,
+			am.LogError("Invalid ed25519 pubkey length from participants", types.ParticipantsVerification,
 				"got_bytes", len(keyBytes), "want_bytes", ed25519.PubKeySize)
 			continue
 		}
 
 		addr := strings.ToUpper(pk.Address().String())
-		am.LogInfo("BeginBlock participant address", types.Participants, "consensus addr hex", addr)
-
+		am.LogDebug("participant address", types.ParticipantsVerification, "consensus_addr_hex", addr)
 		vals[addr] = data{pk: pk, weight: v.Weight}
 	}
 
@@ -260,7 +263,7 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 		addr := strings.ToUpper(hex.EncodeToString(v.Validator.Address))
 		participantData, ok := vals[addr]
 		if !ok {
-			am.LogError("Failed to find validator for cons addrs", types.Participants, "consAddr", addr)
+			am.LogError("Failed to find validator for consensus address", types.ParticipantsVerification, "consensus_addr_hex", addr)
 		} else {
 			pubKey = base64.StdEncoding.EncodeToString(participantData.pk.Bytes())
 		}
@@ -281,15 +284,11 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 	}
 
 	if err := am.keeper.SetBlockProof(sdkCtx, proof); err != nil {
-		am.LogError("Failed to set BlockProof", types.Participants, "height", target, "error", err)
-		return nil
+		am.LogError("Failed to set BlockProof", types.ParticipantsVerification, "height", target, "error", err)
 	}
 
-	am.LogInfo("BlockProof stored", types.Participants,
-		"created_at_block_height", target,
-		"total_power", totalPower,
-		"signed_power", signedPower)
-	return nil
+	am.LogInfo("BlockProof stored", types.ParticipantsVerification, "created_at_block_height", target, "total_power", totalPower)
+	return
 }
 
 func (am AppModule) expireInferences(ctx context.Context, timeouts []types.InferenceTimeout) error {
@@ -542,13 +541,11 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		CreatedAtBlockHeight: blockHeight,
 	})
 
-	// TODO uncomment me
-	/*if err := am.keeper.SetPendingProof(ctx, blockHeight, upcomingEpoch.Index); err != nil {
-		am.LogError("errors setting pendgin proof", types.Stages, "err", err, "blockHeight", blockHeight)
+	if err := am.keeper.SetPendingProof(ctx, blockHeight, upcomingEpoch.Index); err != nil {
+		am.LogError("errors setting pending proof", types.Stages, "err", err, "blockHeight", blockHeight)
 	} else {
-		am.LogInfo("set pending proof on height", types.EpochGroup, "blockHeight", blockHeight)
+		am.LogInfo("set pending proof on height", types.Stages, "blockHeight", blockHeight)
 	}
-	*/
 
 	upcomingEg, err := am.keeper.GetEpochGroupForEpoch(ctx, *upcomingEpoch)
 	if err != nil {

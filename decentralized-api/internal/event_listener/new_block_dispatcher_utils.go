@@ -8,11 +8,11 @@ import (
 	"strconv"
 )
 
-func fillValidatorsProof(lastCommit chainevents.LastCommit) *types.ValidatorsProof {
+func fillValidatorsProof(lastCommit chainevents.LastCommit) (*types.ValidatorsProof, error) {
 	height, err := strconv.ParseInt(lastCommit.Height, 10, 64)
 	if err != nil {
-		logging.Error("Failed to parse block height to int", types.System, "height", lastCommit.Height, "error", err)
-		return nil
+		logging.Error("Failed to parse block height to int", types.ParticipantsVerification, "height", lastCommit.Height, "error", err)
+		return nil, err
 	}
 
 	proof := &types.ValidatorsProof{
@@ -27,7 +27,7 @@ func fillValidatorsProof(lastCommit chainevents.LastCommit) *types.ValidatorsPro
 	}
 
 	for _, sign := range lastCommit.Signatures {
-		logging.Info("Preparing signature to send", types.System,
+		logging.Info("Preparing signature to send", types.ParticipantsVerification,
 			"sign_ts", sign.Timestamp,
 			"signature", sign.Signature,
 			"height", height,
@@ -39,5 +39,5 @@ func fillValidatorsProof(lastCommit chainevents.LastCommit) *types.ValidatorsPro
 			Timestamp:           sign.Timestamp,
 		})
 	}
-	return proof
+	return proof, nil
 }
