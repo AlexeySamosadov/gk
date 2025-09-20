@@ -684,6 +684,7 @@ func compareLogits(
 	baseComparisonResult BaseValidationResult,
 ) ValidationResult {
 	if len(originalLogits) != len(validationLogits) {
+		logging.Error("Different length of logits", types.Validation, "originalLogits", originalLogits, "validationLogits", validationLogits, "lengthOriginal", len(originalLogits), "lengthValidation", len(validationLogits))
 		return &DifferentLengthValidationResult{baseComparisonResult}
 	}
 
@@ -691,6 +692,8 @@ func compareLogits(
 		o := originalLogits[i]
 		v := validationLogits[i]
 		if o.Token != v.Token {
+			logging.Error("Different tokens in logits", types.Validation, "originalLogits", originalLogits, "validationLogits", validationLogits)
+
 			return &DifferentTokensValidationResult{baseComparisonResult}
 		}
 	}
