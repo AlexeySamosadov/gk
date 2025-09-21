@@ -5191,7 +5191,7 @@
           "v_ram": "80",
           "throughput_per_nonce": "1000",
           "validation_threshold": {
-            "value": "98",
+            "value": "96",
             "exponent": -2
           }
         },
@@ -5208,7 +5208,7 @@
           "v_ram": "24",
           "throughput_per_nonce": "10000",
           "validation_threshold": {
-            "value": "98",
+            "value": "96",
             "exponent": -2
           }
         }
