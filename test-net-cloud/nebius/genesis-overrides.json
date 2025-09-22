@@ -63,16 +63,16 @@
     "inference": {
       "params": {
         "epoch_params": {
-        "epoch_length": "220",
-        "epoch_multiplier": "1",
-        "epoch_shift": "150",
-        "poc_stage_duration": "60",
-        "poc_exchange_duration": "5",
-        "poc_validation_delay": "5",
-        "poc_validation_duration": "20",
-        "set_new_validators_delay": "30",
-        "inference_validation_cutoff": "20",
-        "default_unit_of_compute_price": "100"
+          "epoch_length": "220",
+          "epoch_multiplier": "1",
+          "epoch_shift": "150",
+          "poc_stage_duration": "60",
+          "poc_exchange_duration": "5",
+          "poc_validation_delay": "5",
+          "poc_validation_duration": "20",
+          "set_new_validators_delay": "30",
+          "inference_validation_cutoff": "20",
+          "default_unit_of_compute_price": "100"
         },
         "bandwidth_limits_params": {
           "estimated_limits_per_block_kb": "10752",
@@ -97,13 +97,16 @@
             "--quantization",
             "fp8",
             "--kv-cache-dtype",
-            "fp8"
+            "fp8",
+            "--enable-auto-tool-choice",
+            "--tool-call-parser",
+            "hermes"
           ],
           "v_ram": "80",
           "throughput_per_nonce": "1000",
           "validation_threshold": {
-            "value": "98",
-            "exponent": -2
+            "value": "95814",
+            "exponent": -5
           }
         },
         {
@@ -114,12 +117,35 @@
           "hf_commit": "a09a35458c702b33eeacc393d103063234e8bc28",
           "model_args": [
             "--quantization",
-            "fp8"
+            "fp8",
+            "--enable-auto-tool-choice",
+            "--tool-call-parser",
+            "hermes"
           ],
           "v_ram": "24",
           "throughput_per_nonce": "10000",
           "validation_threshold": {
-            "value": "98",
+            "value": "95",
+            "exponent": -2
+          }
+        },
+        {
+          "proposed_by": "genesis",
+          "id": "Qwen/Qwen3-4B-Instruct-2507",
+          "units_of_compute_per_token": "100",
+          "hf_repo": "Qwen/Qwen3-4B-Instruct-2507",
+          "hf_commit": "cdbee75f17c01a7cc42f958dc650907174af0554",
+          "model_args": [
+            "--enable-auto-tool-choice",
+            "--tool-call-parser",
+            "hermes",
+            "--max-model-len",
+            "25000"
+          ],
+          "v_ram": "24",
+          "throughput_per_nonce": "10000",
+          "validation_threshold": {
+            "value": "95",
             "exponent": -2
           }
         }

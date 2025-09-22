@@ -682,7 +682,7 @@ def add_genesis_account(account_key: AccountKey):
     print(f"Adding genesis account for address: {account_key.address}")
     
     # Now run the genesis add-genesis-account command
-    genesis_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T node sh -lc \"inferenced genesis add-genesis-account {account_key.address} 1ngonka\"'"
+    genesis_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T node sh -lc \"inferenced genesis add-genesis-account {account_key.address} 150000000ngonka\"'"
     
     print("Running genesis add-genesis-account command...")
     genesis_result = subprocess.run(
