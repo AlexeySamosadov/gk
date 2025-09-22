@@ -8,6 +8,7 @@ Contributors can request direct access to this TestNet for experiments.
 
 - TestNet must be deployed from the `testnet` branch of the repo
 - The `test-net-cloud/nebius` directory of the `testnet` branch must have scripts that automatically restart testnet at the current mainnet version
+- If you break the testnet, you must redeploy it from the `testnet` branch using the scripts in this directory
 - Developers shouldn't redeploy testnet from their branch as it might block work of other contributors. Any deployment changes must be discussed explicitly
 - There is no limit on using, running upgrades or changing params when the chain is running, but it might be useful to notify colleagues about major changes to avoid conflicts 
 
