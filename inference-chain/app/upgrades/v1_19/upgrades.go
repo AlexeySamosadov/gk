@@ -9,13 +9,12 @@ import (
 	authztypes "github.com/cosmos/cosmos-sdk/x/authz"
 	"github.com/productscience/inference/x/inference/keeper"
 	"github.com/productscience/inference/x/inference/types"
-	"time"
 )
 
 var activeParticipantsEpoch0Test = types.ActiveParticipants{
 	Participants: []*types.ActiveParticipant{
 		{
-			ValidatorKey: "MEMybogXADwq5AAA0gcs7iwKA3rCIiTY7OYnk0Psz1Q=",
+			ValidatorKey: "tl6U/XtzUsmsUDPoMaColWG72vNqzyXhr6/EP49EvFk=",
 		},
 	},
 	PocStartBlockHeight:  1,
@@ -117,7 +116,6 @@ func CreateUpgradeHandler(
 			authorization2 := authztypes.NewGenericAuthorization(sdk.MsgTypeURL(&types.MsgSubmitActiveParticipantsProofData{}))
 
 			participants := k.GetAllParticipant(ctx)
-			expirationTime := time.Now().Add(365 * 24 * time.Hour)
 			for _, participant := range participants {
 				if participant.ValidatorKey == "" {
 					continue
@@ -145,12 +143,12 @@ func CreateUpgradeHandler(
 						continue
 					}
 
-					if err := k.AuthzKeeper.SaveGrant(ctx, granteeAddr, participantAddr, authorization1, &expirationTime); err != nil {
+					if err := k.AuthzKeeper.SaveGrant(ctx, granteeAddr, participantAddr, authorization1, nil); err != nil {
 						k.LogError("error saving grant for authorization1", types.Upgrades, "err", err, "grantee", grantee.Address, "participant", participant.Address)
 						continue
 					}
 
-					if err := k.AuthzKeeper.SaveGrant(ctx, granteeAddr, participantAddr, authorization2, &expirationTime); err != nil {
+					if err := k.AuthzKeeper.SaveGrant(ctx, granteeAddr, participantAddr, authorization2, nil); err != nil {
 						k.LogError("error saving grant for authorization2", types.Upgrades, "err", err, "grantee", grantee.Address, "participant", participant.Address)
 						continue
 					}
