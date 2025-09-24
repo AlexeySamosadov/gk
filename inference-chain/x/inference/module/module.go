@@ -609,6 +609,28 @@ func (am AppModule) moveUpcomingToEffectiveGroup(ctx context.Context, blockHeigh
 
 	am.keeper.SetEpochGroupData(ctx, newGroupData)
 	am.keeper.SetEpochGroupData(ctx, previousGroupData)
+
+	// Set all current ActiveParticipants as ParticipantStatus_ACTIVE
+	activeParticipants, found := am.keeper.GetActiveParticipants(ctx, newEpochIndex)
+	if !found {
+		am.LogError("Unable to get active participants", types.EpochGroup, "epochIndex", newEpochIndex)
+		return
+	}
+	ids := make([]string, len(activeParticipants.Participants))
+	for i, participant := range activeParticipants.Participants {
+		ids[i] = participant.Index
+	}
+	participants, ok := am.keeper.GetParticipants(ctx, ids)
+	if !ok {
+		am.LogError("Unable to get participants", types.EpochGroup, "ids", ids)
+		return
+	}
+
+	am.LogInfo("Setting participants to active", types.EpochGroup, "len(participants)", len(participants))
+	for _, participant := range participants {
+		participant.Status = types.ParticipantStatus_ACTIVE
+		am.keeper.SetParticipant(ctx, participant)
+	}
 }
 
 // applyEpochPowerCapping applies universal power capping to activeParticipants after ComputeNewWeights

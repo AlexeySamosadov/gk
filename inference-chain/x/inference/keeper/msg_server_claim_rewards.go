@@ -187,8 +187,9 @@ func (k msgServer) hasSignificantMissedValidations(ctx sdk.Context, msg *types.M
 			missed++
 		}
 	}
-
 	passed, err := calculations.MissedStatTest(missed, total)
+	k.LogInfo("Missed validations", types.Claims, "missed", missed, "totalToBeValidated", total, "passed", passed)
+
 	if err != nil {
 		return false, err
 	}

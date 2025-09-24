@@ -5,9 +5,15 @@ import (
 	"math/big"
 	"testing"
 
+	"cosmossdk.io/log"
 	"github.com/productscience/inference/x/inference/types"
 	"github.com/stretchr/testify/require"
 )
+
+// createTestLogger creates a logger for testing
+func createTestLogger(t *testing.T) log.Logger {
+	return log.NewTestLogger(t)
+}
 
 func TestCalculateFixedEpochReward(t *testing.T) {
 	// Test parameters matching Bitcoin proposal defaults
@@ -197,7 +203,8 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 	}
 
 	t.Run("Successful Bitcoin reward distribution", func(t *testing.T) {
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(participants, epochGroupData, bitcoinParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(participants, epochGroupData, bitcoinParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(results))
 
@@ -281,7 +288,8 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 			},
 		}
 
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(participantsWithDowntime, epochGroupData, bitcoinParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(participantsWithDowntime, epochGroupData, bitcoinParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(results))
 
@@ -342,7 +350,8 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 			},
 		}
 
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(invalidParticipants, epochGroupData, bitcoinParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(invalidParticipants, epochGroupData, bitcoinParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(results))
 
@@ -376,7 +385,8 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 			},
 		}
 
-		results, _, err := CalculateParticipantBitcoinRewards(negativeParticipants, epochGroupData, bitcoinParams)
+		logger := createTestLogger(t)
+		results, _, err := CalculateParticipantBitcoinRewards(negativeParticipants, epochGroupData, bitcoinParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(results))
 
@@ -424,7 +434,8 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 			},
 		}
 
-		results, _, err := CalculateParticipantBitcoinRewards(zeroWeightParticipants, zeroWeightEpochData, bitcoinParams)
+		logger := createTestLogger(t)
+		results, _, err := CalculateParticipantBitcoinRewards(zeroWeightParticipants, zeroWeightEpochData, bitcoinParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(results))
 
@@ -442,18 +453,20 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 	})
 
 	t.Run("Parameter validation", func(t *testing.T) {
+		logger := createTestLogger(t)
+
 		// Nil participants
-		_, _, err := CalculateParticipantBitcoinRewards(nil, epochGroupData, bitcoinParams)
+		_, _, err := CalculateParticipantBitcoinRewards(nil, epochGroupData, bitcoinParams, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "participants cannot be nil")
 
 		// Nil epoch group data
-		_, _, err = CalculateParticipantBitcoinRewards(participants, nil, bitcoinParams)
+		_, _, err = CalculateParticipantBitcoinRewards(participants, nil, bitcoinParams, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "epoch group data cannot be nil")
 
 		// Nil bitcoin params
-		_, _, err = CalculateParticipantBitcoinRewards(participants, epochGroupData, nil)
+		_, _, err = CalculateParticipantBitcoinRewards(participants, epochGroupData, nil, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "bitcoin parameters cannot be nil")
 	})
@@ -483,7 +496,8 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 			},
 		}
 
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(genesisParticipants, genesisEpochData, bitcoinParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(genesisParticipants, genesisEpochData, bitcoinParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(results))
 
@@ -560,7 +574,8 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 			},
 		}
 
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(remainderParticipants, remainderEpochData, oddRewardParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(remainderParticipants, remainderEpochData, oddRewardParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(results))
 
@@ -643,12 +658,13 @@ func TestGetBitcoinSettleAmounts(t *testing.T) {
 
 	t.Run("Main entry point function works correctly", func(t *testing.T) {
 		// Call the main entry point function
-		results, bitcoinResult, err := GetBitcoinSettleAmounts(participants, epochGroupData, bitcoinParams, settleParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := GetBitcoinSettleAmounts(participants, epochGroupData, bitcoinParams, settleParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(results))
 
 		// Verify it returns same results as the underlying function
-		expectedResults, expectedBitcoinResult, expectedErr := CalculateParticipantBitcoinRewards(participants, epochGroupData, bitcoinParams)
+		expectedResults, expectedBitcoinResult, expectedErr := CalculateParticipantBitcoinRewards(participants, epochGroupData, bitcoinParams, logger)
 		require.Equal(t, expectedErr, err)
 		require.Equal(t, expectedBitcoinResult, bitcoinResult)
 		require.Equal(t, len(expectedResults), len(results))
@@ -674,23 +690,25 @@ func TestGetBitcoinSettleAmounts(t *testing.T) {
 	})
 
 	t.Run("Parameter validation in main entry point", func(t *testing.T) {
+		logger := createTestLogger(t)
+
 		// Nil participants
-		_, _, err := GetBitcoinSettleAmounts(nil, epochGroupData, bitcoinParams, settleParams)
+		_, _, err := GetBitcoinSettleAmounts(nil, epochGroupData, bitcoinParams, settleParams, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "participants cannot be nil")
 
 		// Nil epoch group data
-		_, _, err = GetBitcoinSettleAmounts(participants, nil, bitcoinParams, settleParams)
+		_, _, err = GetBitcoinSettleAmounts(participants, nil, bitcoinParams, settleParams, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "epochGroupData cannot be nil")
 
 		// Nil bitcoin params
-		_, _, err = GetBitcoinSettleAmounts(participants, epochGroupData, nil, settleParams)
+		_, _, err = GetBitcoinSettleAmounts(participants, epochGroupData, nil, settleParams, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "bitcoinParams cannot be nil")
 
 		// Nil settle params
-		_, _, err = GetBitcoinSettleAmounts(participants, epochGroupData, bitcoinParams, nil)
+		_, _, err = GetBitcoinSettleAmounts(participants, epochGroupData, bitcoinParams, nil, logger)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "settleParams cannot be nil")
 	})
@@ -703,7 +721,8 @@ func TestGetBitcoinSettleAmounts(t *testing.T) {
 		}
 
 		// Call with supply cap constraints
-		results, bitcoinResult, err := GetBitcoinSettleAmounts(participants, epochGroupData, bitcoinParams, supplyCappedParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := GetBitcoinSettleAmounts(participants, epochGroupData, bitcoinParams, supplyCappedParams, logger)
 		require.NoError(t, err)
 
 		// Verify the amount was reduced to fit within cap
@@ -732,7 +751,8 @@ func TestGetBitcoinSettleAmounts(t *testing.T) {
 		}
 
 		// Call with supply cap already reached
-		results, bitcoinResult, err := GetBitcoinSettleAmounts(participants, epochGroupData, bitcoinParams, capReachedParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := GetBitcoinSettleAmounts(participants, epochGroupData, bitcoinParams, capReachedParams, logger)
 		require.NoError(t, err)
 
 		// Verify no rewards are minted
@@ -977,7 +997,8 @@ func TestLargeValueEdgeCases(t *testing.T) {
 		}
 
 		// Should handle large number of participants efficiently
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(largeParticipants, largeEpochData, bitcoinParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(largeParticipants, largeEpochData, bitcoinParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, numParticipants, len(results))
 
@@ -1046,7 +1067,8 @@ func TestLargeValueEdgeCases(t *testing.T) {
 
 		largeWeightData.EpochIndex = 1 // First reward epoch for no decay (epochsSinceGenesis = 1 - 1 = 0)
 
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(largeParticipants, largeWeightData, bitcoinParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(largeParticipants, largeWeightData, bitcoinParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(results))
 
@@ -1138,7 +1160,8 @@ func TestMathematicalPrecision(t *testing.T) {
 			{Address: "participant3", CoinBalance: 300, Status: types.ParticipantStatus_ACTIVE, CurrentEpochStats: &types.CurrentEpochStats{InferenceCount: 100, MissedRequests: 0}},
 		}
 
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(primeParticipants, primeEpochData, primeRewardParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(primeParticipants, primeEpochData, primeRewardParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(results))
 
@@ -1194,7 +1217,8 @@ func TestMathematicalPrecision(t *testing.T) {
 			{Address: "participant2", CoinBalance: 200, Status: types.ParticipantStatus_ACTIVE, CurrentEpochStats: &types.CurrentEpochStats{InferenceCount: 100, MissedRequests: 0}},
 		}
 
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(evenParticipants, evenEpochData, evenRewardParams)
+		logger := createTestLogger(t)
+		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(evenParticipants, evenEpochData, evenRewardParams, logger)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(results))
 
