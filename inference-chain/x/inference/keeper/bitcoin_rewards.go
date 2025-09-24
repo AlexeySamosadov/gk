@@ -49,7 +49,7 @@ func GetBitcoinSettleAmounts(
 	// 5. Error management
 	settleResults, bitcoinResult, err := CalculateParticipantBitcoinRewards(participants, epochGroupData, bitcoinParams, logger)
 	if err != nil {
-		logger.Error("Error calculating participant bitcoin rewards", types.Tokenomics, "error", err)
+		logger.Error("Error calculating participant bitcoin rewards", "error", err)
 		return settleResults, bitcoinResult, err
 	}
 
@@ -243,7 +243,7 @@ func CalculateParticipantBitcoinRewards(
 	for _, participant := range participants {
 		// Skip invalid participants from PoC weight calculations
 		if participant.Status == types.ParticipantStatus_INVALID {
-			logger.Info("Invalid participant found in PoC weight calculations, skipping", types.Tokenomics, "participant", participant.Address)
+			logger.Info("Invalid participant found in PoC weight calculations, skipping", "participant", participant.Address)
 			participantWeights[participant.Address] = 0
 			continue
 		}
@@ -253,8 +253,9 @@ func CalculateParticipantBitcoinRewards(
 		totalPoCWeight += pocWeight
 	}
 
-	logger.Info("Bitcoin Rewards: Checking downtime for participants", types.Tokenomics, "participants", len(participants))
+	logger.Info("Bitcoin Rewards: Checking downtime for participants", "participants", len(participants))
 	CheckAndPunishForDowntimeForParticipants(participants, participantWeights, logger)
+	logger.Info("Bitcoin Rewards: weights after downtime check", "participants", participantWeights)
 
 	// 3. Create settle results for each participant
 	settleResults := make([]*SettleResult, 0, len(participants))

@@ -99,9 +99,9 @@ func CheckAndPunishForDowntimeForParticipants(participants []types.Participant, 
 func CheckAndPunishForDowntimeForParticipant(participant types.Participant, reward uint64, logger log.Logger) uint64 {
 	totalRequests := participant.CurrentEpochStats.InferenceCount + participant.CurrentEpochStats.MissedRequests
 	missedRequests := participant.CurrentEpochStats.MissedRequests
-	logger.Info("Checking downtime for participant", types.Tokenomics, "participant", participant.Address, "totalRequests", totalRequests, "missedRequests", missedRequests, "reward", reward)
+	logger.Info("Checking downtime for participant", "participant", participant.Address, "totalRequests", totalRequests, "missedRequests", missedRequests, "reward", reward)
 	finalReward := CheckAndPunishForDowntime(totalRequests, missedRequests, reward)
-	logger.Info("Final reward after downtime check", types.Tokenomics, "participant", participant.Address, "finalReward", finalReward)
+	logger.Info("Final reward after downtime check", "participant", participant.Address, "finalReward", finalReward)
 	return finalReward
 }
 
@@ -164,6 +164,7 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 			k.LogError("Bitcoin reward amount is negative", types.Settle, "amount", bitcoinResult.Amount)
 			return types.ErrNegativeRewardAmount
 		}
+		k.LogInfo("Bitcoin reward amount", types.Settle, "amount", bitcoinResult.Amount)
 		rewardAmount = bitcoinResult.Amount
 	} else {
 		// Use current WorkCoins-based variable reward system with its own parameters
