@@ -124,7 +124,7 @@ func MissedStatTest(nMissed, nTotal int) (bool, error) {
 	if nTotal == 0 {
 		return true, nil
 	}
-	if nMissed < 0 || nTotal <= 0 || nMissed > nTotal {
+	if nMissed < 0 || nTotal < 0 || nMissed > nTotal {
 		return false, errors.New("invalid input: requires 0 <= nMissed <= nTotal and nTotal > 0")
 	}
 
