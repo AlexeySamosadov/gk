@@ -1,5 +1,15 @@
 package admin
 
+import (
+	cosmos_client "decentralized-api/cosmosclient"
+	"fmt"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/productscience/inference/x/inference/types"
+	"github.com/stretchr/testify/assert"
+	"testing"
+)
+
 /*func TestCalculateActiveParticipantsEpoch0(t *testing.T) {
 	const (
 		// getParticipantsFirstEpochUrl = "http://89.169.103.180:8000/v1/epochs/1/participants"
@@ -80,3 +90,34 @@ package admin
 	assert.NoError(t, err)
 	fmt.Println(string(jsonBytes))
 }*/
+
+func TestMainnet(testing *testing.T) {
+	const epoch = 1
+	cl, err := cosmos_client.NewRpcClient("http://node2.gonka.ai:26657")
+	assert.NoError(testing, err)
+
+	dataKey := types.ActiveParticipantsFullKey(epoch)
+	result, err := cosmos_client.QueryByKey(cl, "inference", dataKey)
+	assert.NoError(testing, err)
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	types.RegisterInterfaces(interfaceRegistry)
+	cdc := codec.NewProtoCodec(interfaceRegistry)
+
+	var activeParticipants types.ActiveParticipants
+	err = cdc.Unmarshal(result.Response.Value, &activeParticipants)
+	assert.NoError(testing, err)
+	fmt.Printf("activeParticipants.CreatedAtBlockHeight %v", activeParticipants.CreatedAtBlockHeight)
+	fmt.Printf("activeParticipants.EpochId %v", activeParticipants.EpochId)
+	for _, participant := range activeParticipants.Participants {
+		fmt.Println(participant)
+	}
+
+	result, err = cosmos_client.QueryByKeyWithOptions(cl, "inference", dataKey, activeParticipants.CreatedAtBlockHeight, true)
+	assert.NoError(testing, err)
+
+	if result.Response.ProofOps == nil {
+		testing.Error("Failed to query active participant. Req 2", types.Participants, "error", err)
+	}
+	fmt.Println(result.Response.ProofOps)
+}

@@ -5,16 +5,9 @@ import (
 	cosmos_client "decentralized-api/cosmosclient"
 	"decentralized-api/internal/utils"
 	"decentralized-api/logging"
-	"encoding/base64"
-	"encoding/hex"
-	"github.com/cometbft/cometbft/crypto/tmhash"
-	rpcclient "github.com/cometbft/cometbft/rpc/client/http"
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
-	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/labstack/echo/v4"
 	"github.com/productscience/inference/x/inference/types"
 	"net/http"
-	"strings"
 )
 
 func (s *Server) getInferenceParticipantByAddress(c echo.Context) error {
@@ -99,58 +92,4 @@ func (s *Server) getAllParticipants(ctx echo.Context) error {
 		Participants: participants,
 		BlockHeight:  r.BlockHeight,
 	})
-}
-
-func queryActiveParticipants(rpcClient *rpcclient.HTTP, cdc *codec.ProtoCodec, epoch uint64) (*coretypes.ResultABCIQuery, error) {
-	dataKey := types.ActiveParticipantsFullKey(epoch)
-	result, err := cosmos_client.QueryByKey(rpcClient, "inference", dataKey)
-	if err != nil {
-		logging.Error("Failed to query active participants. Req 1", types.Participants, "error", err)
-		return nil, err
-	}
-
-	logging.Info("[PARTICIPANTS-DEBUG] Raw active participants query result", types.Participants,
-		"epoch", epoch,
-		"value_bytes", len(result.Response.Value))
-
-	if len(result.Response.Value) == 0 {
-		logging.Error("Active participants query returned empty value", types.Participants, "epoch", epoch)
-		return nil, echo.NewHTTPError(http.StatusNotFound, "No active participants found for the specified epoch. "+
-			"Looks like PoC failed!")
-	}
-
-	var activeParticipants types.ActiveParticipants
-	if err := cdc.Unmarshal(result.Response.Value, &activeParticipants); err != nil {
-		logging.Error("Failed to unmarshal active participant. Req 1", types.Participants, "error", err)
-		return nil, err
-	}
-
-	logging.Info("[PARTICIPANTS-DEBUG] Unmarshalled ActiveParticipants", types.Participants,
-		"epoch", epoch,
-		"created_at_block_height", activeParticipants.CreatedAtBlockHeight,
-		"effective_block_height", activeParticipants.EffectiveBlockHeight)
-
-	blockHeight := activeParticipants.CreatedAtBlockHeight
-	queryWIthProof := true
-	if blockHeight <= 1 {
-		// cosmos can't build merkle proof for genesis because need previous state
-		queryWIthProof = false
-	}
-	result, err = cosmos_client.QueryByKeyWithOptions(rpcClient, "inference", dataKey, blockHeight, queryWIthProof)
-	if err != nil {
-		logging.Error("Failed to query active participant. Req 2", types.Participants, "error", err)
-		return nil, err
-	}
-	return result, err
-}
-
-func pubKeyToAddress3(pubKey string) (string, error) {
-	pubKeyBytes, err := base64.StdEncoding.DecodeString(pubKey)
-	if err != nil {
-		return "", err
-	}
-
-	valAddr := tmhash.SumTruncated(pubKeyBytes)
-	valAddrHex := strings.ToUpper(hex.EncodeToString(valAddr))
-	return valAddrHex, nil
 }
