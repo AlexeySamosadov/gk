@@ -45,6 +45,8 @@ func (c *RewardRecoveryChecker) RecoverIfNeeded(
 	currentBlockHeight int64,
 ) {
 	if c.launchBlockHeight == 0 {
+		logging.Info("[AutoRewardRecovery] Launch block height not set, setting to current block height", types.Claims,
+			"currentBlockHeight", currentBlockHeight)
 		c.launchBlockHeight = currentBlockHeight
 	}
 
