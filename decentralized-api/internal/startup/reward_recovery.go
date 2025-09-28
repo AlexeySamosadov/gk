@@ -16,6 +16,22 @@ import (
 const waitTimeBlocksFromLaunch = 60
 const waitBetweenAttempts = 100
 
+func NewRewardRecoveryChecker(
+	phaseTracker *chainphase.ChainPhaseTracker,
+	recorder *cosmosclient.InferenceCosmosClient,
+	validator *validation.InferenceValidator,
+	configManager *apiconfig.ConfigManager,
+) *RewardRecoveryChecker {
+	return &RewardRecoveryChecker{
+		launchBlockHeight:       0,
+		lastRecoveryBlockHeight: 0,
+		phaseTracker:            phaseTracker,
+		recorder:                recorder,
+		validator:               validator,
+		configManager:           configManager,
+	}
+}
+
 type RewardRecoveryChecker struct {
 	launchBlockHeight       int64
 	lastRecoveryBlockHeight int64
@@ -28,6 +44,10 @@ type RewardRecoveryChecker struct {
 func (c *RewardRecoveryChecker) RecoverIfNeeded(
 	currentBlockHeight int64,
 ) {
+	if c.launchBlockHeight == 0 {
+		c.launchBlockHeight = currentBlockHeight
+	}
+
 	if currentBlockHeight < (c.launchBlockHeight + waitTimeBlocksFromLaunch) {
 		logging.Debug("[AutoRewardRecovery] Waiting for launch", types.Claims,
 			"currentBlockHeight", currentBlockHeight,

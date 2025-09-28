@@ -87,16 +87,17 @@ func NewEventListener(
 	}
 
 	return &EventListener{
-		nodeBroker:          nodeBroker,
-		transactionRecorder: transactionRecorder,
-		configManager:       configManager,
-		validator:           validator,
-		trainingExecutor:    trainingExecutor,
-		phaseTracker:        phaseTracker,
-		dispatcher:          dispatcher,
-		cancelFunc:          cancelFunc,
-		blsManager:          blsManager,
-		eventHandlers:       eventHandlers,
+		nodeBroker:            nodeBroker,
+		transactionRecorder:   transactionRecorder,
+		configManager:         configManager,
+		validator:             validator,
+		trainingExecutor:      trainingExecutor,
+		phaseTracker:          phaseTracker,
+		dispatcher:            dispatcher,
+		cancelFunc:            cancelFunc,
+		blsManager:            blsManager,
+		eventHandlers:         eventHandlers,
+		rewardRecoveryChecker: startup.NewRewardRecoveryChecker(phaseTracker, &transactionRecorder, validator, configManager),
 	}
 }
 
@@ -316,7 +317,9 @@ func (el *EventListener) processEvent(event *chainevents.JSONRPCResponse, worker
 
 		// Still handle upgrade processing separately
 		upgrade.ProcessNewBlockEvent(event, el.transactionRecorder, el.configManager)
-		el.rewardRecoveryChecker.RecoverIfNeeded(blockInfo.Height)
+		if el.isNodeSynced() {
+			el.rewardRecoveryChecker.RecoverIfNeeded(blockInfo.Height)
+		}
 
 	case txEventType:
 		if el.hasHandler(event) {
