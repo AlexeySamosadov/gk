@@ -260,7 +260,7 @@ func (ms msgServer) validateSeedSignature(ctx sdk.Context, msg *types.MsgClaimRe
 	}
 
 	ms.LogError("Seed signature validation failed", types.Claims, "account", msg.Creator)
-	return err
+	return types.ErrClaimSignatureInvalid
 }
 
 func (k msgServer) getValidatedInferences(ctx sdk.Context, msg *types.MsgClaimRewards) map[string]bool {
