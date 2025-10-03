@@ -5,28 +5,15 @@ import (
 	cosmos_client "decentralized-api/cosmosclient"
 	"decentralized-api/internal/utils"
 	"decentralized-api/logging"
-	"decentralized-api/merkleproof"
-	"encoding/base64"
-	"encoding/hex"
 	"fmt"
-	"net/http"
-	"net/url"
-	"strconv"
-	"strings"
-
-	comettypes "github.com/cometbft/cometbft/types"
-
-	"github.com/cometbft/cometbft/crypto/tmhash"
-	rpcclient "github.com/cometbft/cometbft/rpc/client/http"
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
-	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"
 	"github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/labstack/echo/v4"
 	"github.com/productscience/inference/x/inference/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"net/http"
+	"strconv"
 )
 
 func (s *Server) getInferenceParticipantByAddress(c echo.Context) error {

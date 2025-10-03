@@ -4,13 +4,12 @@ package app
 
 import (
 	"context"
-	"fmt"
-	"github.com/productscience/inference/app/upgrades/v1_19"
-
 	upgradetypes "cosmossdk.io/x/upgrade/types"
+	"fmt"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	v0_2_2 "github.com/productscience/inference/app/upgrades/v0_2_2"
+	"github.com/productscience/inference/app/upgrades/v0_2_4"
 	inferencetypes "github.com/productscience/inference/x/inference/types"
 )
 
@@ -43,6 +42,7 @@ func (app *App) setupUpgradeHandlers() {
 	app.Logger().Info("Applying upgrade", "upgradeInfo", upgradeInfo)
 
 	app.UpgradeKeeper.SetUpgradeHandler(v0_2_2.UpgradeName, v0_2_2.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
+	app.UpgradeKeeper.SetUpgradeHandler(v0_2_4.UpgradeName, v0_2_4.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
 }
 
 func (app *App) registerMigrations() {
