@@ -29,15 +29,15 @@ exit
 
 5\ Download the new version of the chain node with the patch
 ```shell
-wget -O inferenced https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.3-patch2/inferenced
+wget -O inferenced https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.3-patch3/inferenced
 
-sudo mkdir -p .inference/cosmovisor/upgrades/v0.2.3-patch2/bin/
-sudo cp inferenced .inference/cosmovisor/upgrades/v0.2.3-patch2/bin/inferenced
-sudo chmod +x .inference/cosmovisor/upgrades/v0.2.3-patch2/bin/inferenced
+sudo mkdir -p .inference/cosmovisor/upgrades/v0.2.3-patch3/bin/
+sudo cp inferenced .inference/cosmovisor/upgrades/v0.2.3-patch3/bin/inferenced
+sudo chmod +x .inference/cosmovisor/upgrades/v0.2.3-patch3/bin/inferenced
 sudo rm .inference/cosmovisor/current
-sudo ln -sf upgrades/v0.2.3-patch2 .inference/cosmovisor/current
+sudo ln -sf upgrades/v0.2.3-patch3 .inference/cosmovisor/current
 
-echo "054ec849b632b6b9126225a0e808aec474460781e29e41252b594a46247eae2a  .inference/cosmovisor/current/bin/inferenced" | sudo sha256sum -c --status - && echo SUCCESS || echo FAILED
+echo "699b26ee2212146406ed4fe336428bfc134aade5cf03c55ba5c4f7ebf3ca6c90  .inference/cosmovisor/current/bin/inferenced" | sudo sha256sum -c --status - && echo SUCCESS || echo FAILED
 ```
 You should get SUCCESS in return
 
