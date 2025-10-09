@@ -53,3 +53,28 @@ SSH into the other two servers and run their respective join scripts.
 # On 89.169.110.250
 ./join-2.sh
 ```
+
+### Adding Additional Nodes
+
+Add multiple nodes (e.g., GPU nodes) using the generator:
+
+1. Edit `join-additional/params.csv` with node configs:
+   ```csv
+   domain,ssh_port,p2p_port,api_port,hf_home,deploy_dir
+   example.com,22,26656,8000,/data/hf-cache,/srv/deploy/
+   ```
+
+2. Generate scripts:
+   ```bash
+   python3 join-additional/generate-join-and-scp.py
+   ```
+
+3. Copy to servers:
+   ```bash
+   SSH_KEY_PATH=~/.ssh/your_key ./join-additional/prepare.sh
+   ```
+
+4. On each server:
+   ```bash
+   ./join.sh
+   ```

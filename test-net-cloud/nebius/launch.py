@@ -21,7 +21,8 @@ class AccountKey:
     name: str
 
 
-BASE_DIR = Path(os.environ["HOME"]).absolute()
+CUSTOM_BASE_DIR = os.environ.get("TESTNET_BASE_DIR", None)
+BASE_DIR = Path(CUSTOM_BASE_DIR) if CUSTOM_BASE_DIR else Path(os.environ["HOME"]).absolute()
 GENESIS_VAL_NAME = "testnet-genesis"
 GONKA_REPO_DIR = BASE_DIR / "gonka"
 DEPLOY_DIR = GONKA_REPO_DIR / "deploy/join"
@@ -36,7 +37,7 @@ INFERENCED_BINARY = SimpleNamespace(
 
 INFERENCED_STATE_DIR = BASE_DIR / ".inference"
 
-def load_config_from_env():
+def load_config_from_env(hf_home: str = None):
     """Load configuration from environment variables, with defaults"""
     default_config = {
         "KEY_NAME": "genesis",
@@ -46,7 +47,7 @@ def load_config_from_env():
         "P2P_EXTERNAL_ADDRESS": "tcp://89.169.111.79:5000",
         "ACCOUNT_PUBKEY": "", # will be populated later
         "NODE_CONFIG": "./node-config.json",
-        "HF_HOME": (Path(os.environ["HOME"]).absolute() / "hf-cache").__str__(),
+        "HF_HOME": Path(hf_home) if hf_home else (Path(os.environ["HOME"]).absolute() / "hf-cache").__str__(),
         "SEED_API_URL": "http://89.169.111.79:8000",
         "SEED_NODE_RPC_URL": "http://89.169.111.79:26657",
         "DAPI_API__POC_CALLBACK_URL": "http://api:9100",
@@ -89,7 +90,8 @@ def load_config_from_env():
 
 
 # Load configuration from environment
-CONFIG_ENV = load_config_from_env()
+custom_hf_home = os.environ.get("TESTNET_HF_HOME", None)
+CONFIG_ENV = load_config_from_env(hf_home=custom_hf_home)
 
 
 def clean_state():
@@ -231,7 +233,20 @@ def install_inferenced():
     # Download if not exists
     if not inferenced_zip.exists():
         print(f"Downloading inferenced binary zip: {INFERENCED_BINARY.url}")
-        urllib.request.urlretrieve(url, inferenced_zip)
+        max_retries = 5
+        retry_delay = 5  # seconds
+        for attempt in range(max_retries):
+            try:
+                urllib.request.urlretrieve(url, inferenced_zip)
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"Download failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    print(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    print(f"Download failed after {max_retries} attempts")
+                    raise
     else:
         print(f"{inferenced_zip} already exists")
     
@@ -267,7 +282,7 @@ def create_account_key():
     # Check if key already exists
     try:
         result = subprocess.run(
-            [str(inferenced_binary), "keys", "list", "--keyring-backend", "file"],
+            [str(inferenced_binary), "keys", "list", "--keyring-backend", "file", "--home", str(INFERENCED_STATE_DIR)],
             capture_output=True,
             text=True,
             check=True
@@ -292,7 +307,9 @@ def create_account_key():
         "add", 
         COLD_KEY_NAME, 
         "--keyring-backend", 
-        "file"
+        "file",
+        "--home",
+        str(INFERENCED_STATE_DIR)
     ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     
     stdout, stderr = process.communicate(input=password_input)
@@ -431,22 +448,33 @@ def pull_images():
     compose_files = get_compose_files_arg(include_mlnode=True)
     cmd = f"bash -c 'source {config_file} && docker compose {compose_files} pull'"
     
-    # Run the command in the specified working directory
-    result = subprocess.run(
-        cmd,
-        shell=True,
-        cwd=working_dir,
-        capture_output=True,
-        text=True
-    )
+    # Retry logic for network instability
+    max_retries = 3
+    retry_delay = 10  # seconds
     
-    if result.returncode != 0:
-        print(f"Error pulling images: {result.stderr}")
-        raise subprocess.CalledProcessError(result.returncode, cmd)
-    
-    print("Docker images pulled successfully!")
-    if result.stdout:
-        print(result.stdout)
+    for attempt in range(max_retries):
+        # Run the command in the specified working directory
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            cwd=working_dir,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            print("Docker images pulled successfully!")
+            if result.stdout:
+                print(result.stdout)
+            return
+        
+        if attempt < max_retries - 1:
+            print(f"Error pulling images (attempt {attempt + 1}/{max_retries}): {result.stderr}")
+            print(f"Retrying in {retry_delay} seconds...")
+            time.sleep(retry_delay)
+        else:
+            print(f"Error pulling images after {max_retries} attempts: {result.stderr}")
+            raise subprocess.CalledProcessError(result.returncode, cmd)
 
 
 def create_docker_compose_override(init_only=True, node_id=None):
@@ -793,6 +821,7 @@ def generate_gentx(account_key: AccountKey, consensus_key: str, node_id: str, wa
         str(inferenced_binary),
         "genesis", "gentx",
         "--keyring-backend", "file",
+        "--home", str(INFERENCED_STATE_DIR),
         COLD_KEY_NAME, "1ngonka",
         "--moniker", GENESIS_VAL_NAME,
         "--pubkey", consensus_key,
@@ -863,6 +892,7 @@ def collect_genesis_transactions():
     collect_cmd = [
         str(inferenced_binary),
         "genesis", "collect-gentxs",
+        "--home", str(INFERENCED_STATE_DIR),
         "--gentx-dir", (INFERENCED_STATE_DIR / "config" / "gentx").__str__()
     ]
     
@@ -906,6 +936,7 @@ def patch_genesis_participants():
     patch_cmd = [
         str(inferenced_binary),
         "genesis", "patch-genesis",
+        "--home", str(INFERENCED_STATE_DIR),
         "--genparticipant-dir", (INFERENCED_STATE_DIR / "config" / "genparticipant").__str__()
     ]
     
@@ -1114,6 +1145,7 @@ def grant_key_permissions(warm_key_address: str):
         warm_key_address,  # The warm key address
         "--from", COLD_KEY_NAME,
         "--keyring-backend", "file",
+        "--home", str(INFERENCED_STATE_DIR),
         "--gas", "2000000",
         "--node", f"{seed_api_url}/chain-rpc/"
     ]
