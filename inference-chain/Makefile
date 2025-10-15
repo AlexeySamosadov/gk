@@ -42,9 +42,10 @@ _build-macos:
 	@echo "Cleaning up..."
 	@rm -rf /tmp/wasmvm-static
 
-_build-linux:
+_build-linux: download-linux-deps
 	@echo "Building with static wasmvm linking for Linux..."
 	@CGO_ENABLED=1 CC=gcc \
+		CGO_LDFLAGS="-L$(PWD)/build/deps -lm" \
 		go build -ldflags "$(ldflags) -extldflags '-static'" -tags "muslc" -o ./build/inferenced ./cmd/inferenced/main.go
 
 build:
@@ -53,6 +54,12 @@ build:
 	else \
 		$(MAKE) _build-linux; \
 	fi
+
+download-linux-deps:
+	@echo "--> Downloading static wasmvm library for Linux (x86_64)..."
+	@mkdir -p build/deps
+	@curl -L -o build/deps/libwasmvm_muslc.a $(WASMVM_STATIC_LINUX_X64_URL)
+	@echo "Dependencies downloaded to ./build/deps/"
 
 define DOCKER_BUILD
 	@echo "--> building inferenced docker image"
