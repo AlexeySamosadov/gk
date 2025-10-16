@@ -12,6 +12,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	authztypes "github.com/cosmos/cosmos-sdk/x/authz"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	v1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
 	"github.com/labstack/echo/v4"
@@ -81,6 +82,9 @@ func NewServer(
 	// Manual validation recovery and claim endpoint
 	g.POST("claim-reward/recover", s.postClaimRewardRecover)
 
+	// EXPERIMENTAL: Setup and health report endpoint for participant onboarding
+	g.GET("setup/report", s.getSetupReport)
+
 	return s
 }
 
@@ -89,6 +93,7 @@ func getCodec() *codec.ProtoCodec {
 	app.RegisterLegacyModules(interfaceRegistry)
 	types.RegisterInterfaces(interfaceRegistry)
 	banktypes.RegisterInterfaces(interfaceRegistry)
+	authztypes.RegisterInterfaces(interfaceRegistry)
 	v1.RegisterInterfaces(interfaceRegistry)
 	upgradetypes.RegisterInterfaces(interfaceRegistry)
 	collateraltypes.RegisterInterfaces(interfaceRegistry)
