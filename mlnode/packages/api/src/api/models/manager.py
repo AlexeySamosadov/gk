@@ -40,7 +40,6 @@ from common.logger import create_logger
 
 logger = create_logger(__name__)
 
-# Network-related exceptions that should trigger retries
 NETWORK_EXCEPTIONS = (
     requests.exceptions.ConnectionError,
     requests.exceptions.Timeout,
@@ -48,7 +47,7 @@ NETWORK_EXCEPTIONS = (
     HfHubHTTPError,
     TimeoutError,
     ConnectionError,
-    OSError,  # Can include network-related OS errors
+    OSError,
 )
 
 
@@ -84,6 +83,9 @@ class DownloadTask:
         self.cancelled = False
         self.process: Optional[asyncio.subprocess.Process] = None
         self.logger = logger
+        self.last_progress_time = time.time()
+        self.last_cache_size = 0
+        self.monitor_task: Optional[asyncio.Task] = None
     
     async def cancel(self):
         """Cancel the download task and terminate the subprocess."""
@@ -92,11 +94,12 @@ class DownloadTask:
         
         self.cancelled = True
         
-        # Cancel the async task first
+        if self.monitor_task and not self.monitor_task.done():
+            self.monitor_task.cancel()
+        
         if self.task and not self.task.done():
             self.task.cancel()
         
-        # Terminate the subprocess and all children
         if self.process and self.process.returncode is None:
             await self._terminate_process_tree()
     
@@ -130,11 +133,21 @@ class DownloadTask:
         except psutil.NoSuchProcess:
             self.logger.debug(f"Process {pid} already terminated")
         
-        # Wait for the main process object to update its state
         try:
             await asyncio.wait_for(self.process.wait(), timeout=10)
         except asyncio.TimeoutError:
             self.logger.warning(f"Process {pid} did not terminate after 10s")
+    
+    def update_progress(self, current_cache_size: int):
+        if current_cache_size != self.last_cache_size:
+            self.last_cache_size = current_cache_size
+            self.last_progress_time = time.time()
+    
+    def is_stalled(self, stall_timeout: float = 600) -> bool:
+        if self.status != ModelStatus.DOWNLOADING:
+            return False
+        elapsed_since_progress = time.time() - self.last_progress_time
+        return elapsed_since_progress > stall_timeout
 
 
 class ModelManager:
@@ -156,7 +169,13 @@ class ModelManager:
         
         self._download_tasks: Dict[str, DownloadTask] = {}
         self._lock = asyncio.Lock()
-        logger.info(f"ModelManager initialized with cache_dir: {self.cache_dir}")
+        
+        self.stall_timeout = float(os.environ.get("MODEL_DOWNLOAD_STALL_TIMEOUT", "600"))
+        
+        logger.info(
+            f"ModelManager initialized with cache_dir: {self.cache_dir}, "
+            f"stall_timeout: {self.stall_timeout}s ({self.stall_timeout/60:.1f} min)"
+        )
     
     def _get_task_id(self, model: Model) -> str:
         return model.get_identifier()
@@ -168,18 +187,14 @@ class ModelManager:
         """
         try:
             cache_info = scan_cache_dir(self.cache_dir)
-            
-            # Check if repo exists in cache
             repo = next((r for r in cache_info.repos if r.repo_id == model.hf_repo), None)
             if not repo:
                 return False
             
-            # If specific commit requested, check if that revision exists
             if model.hf_commit:
                 revision = next((r for r in repo.revisions if r.commit_hash == model.hf_commit), None)
                 return revision is not None
             
-            # If no commit specified, any revision counts
             return len(repo.revisions) > 0
             
         except Exception as e:
@@ -256,6 +271,61 @@ class ModelManager:
             logger.error(f"Download verification failed: {model.hf_repo}")
             return False
     
+    def _get_repo_cache_size(self, model: Model) -> int:
+        try:
+            cache_info = scan_cache_dir(self.cache_dir)
+            repo = next((r for r in cache_info.repos if r.repo_id == model.hf_repo), None)
+            if repo:
+                return repo.size_on_disk
+            return 0
+        except Exception as e:
+            logger.debug(f"Error getting cache size for {model.hf_repo}: {e}")
+            return 0
+    
+    async def _monitor_download_progress(
+        self, task_id: str, model: Model, task_obj: DownloadTask, 
+        check_interval: float = 60, stall_timeout: float = 600
+    ):
+        try:
+            logger.info(
+                f"Starting stall monitor for {task_id} "
+                f"(check every {check_interval}s, timeout after {stall_timeout}s)"
+            )
+            
+            while task_obj.status == ModelStatus.DOWNLOADING and not task_obj.cancelled:
+                await asyncio.sleep(check_interval)
+                
+                if task_obj.status != ModelStatus.DOWNLOADING or task_obj.cancelled:
+                    logger.debug(f"Monitor stopping for {task_id}: status changed or cancelled")
+                    break
+                
+                current_size = self._get_repo_cache_size(model)
+                task_obj.update_progress(current_size)
+                
+                if task_obj.is_stalled(stall_timeout):
+                    elapsed_since_progress = time.time() - task_obj.last_progress_time
+                    logger.error(
+                        f"Download stalled for {task_id}: no progress for "
+                        f"{elapsed_since_progress:.0f}s (last size: {current_size} bytes)"
+                    )
+                    task_obj.error_message = f"Download stalled: no progress for {stall_timeout/60:.0f} minutes"
+                    task_obj.status = ModelStatus.PARTIAL
+                    await task_obj.cancel()
+                    break
+                
+                logger.debug(
+                    f"Progress check for {task_id}: cache_size={current_size} bytes, "
+                    f"last_progress={time.time() - task_obj.last_progress_time:.0f}s ago"
+                )
+            
+            logger.info(f"Stall monitor stopped for {task_id}")
+            
+        except asyncio.CancelledError:
+            logger.debug(f"Stall monitor cancelled for {task_id}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in stall monitor for {task_id}: {e}", exc_info=True)
+    
     async def add_model(self, model: Model) -> str:
         """Starts a model download asynchronously.
         
@@ -292,13 +362,17 @@ class ModelManager:
             download_task_obj.task = asyncio.create_task(
                 self._download_model(task_id, model, download_task_obj)
             )
+            
+            download_task_obj.monitor_task = asyncio.create_task(
+                self._monitor_download_progress(
+                    task_id, model, download_task_obj, stall_timeout=self.stall_timeout
+                )
+            )
         
         logger.info(f"Started download for model {task_id}")
         return task_id
     
-    async def _download_model(
-        self, task_id: str, model: Model, task_obj: DownloadTask
-    ):
+    async def _download_model(self, task_id: str, model: Model, task_obj: DownloadTask):
         """Downloads model in subprocess with retry logic, verification, and error handling."""
         try:
             logger.info(
@@ -306,14 +380,12 @@ class ModelManager:
                 f"(commit: {model.hf_commit or 'latest'}) in subprocess"
             )
             
-            # Build command to call the download function
             cmd = [
                 sys.executable, "-c",
                 f"from api.models.manager import _download_model_subprocess; "
                 f"_download_model_subprocess({repr(model.hf_repo)}, {repr(model.hf_commit)}, {repr(self.cache_dir)})"
             ]
             
-            # Start subprocess
             task_obj.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -323,11 +395,10 @@ class ModelManager:
             
             logger.info(f"Download subprocess started with PID {task_obj.process.pid}")
             
-            # Wait for subprocess to complete (timeout after 24 hours)
             try:
                 stdout, stderr = await asyncio.wait_for(
                     task_obj.process.communicate(),
-                    timeout=86400  # 24 hours
+                    timeout=86400
                 )
             except asyncio.TimeoutError:
                 logger.error(f"Download timeout (24 hours) for {task_id}")
@@ -336,27 +407,24 @@ class ModelManager:
                 task_obj.error_message = "Download timeout after 24 hours"
                 return
             
-            # Check subprocess exit code
             if task_obj.process.returncode != 0:
                 error_output = stderr.decode('utf-8', errors='replace')
                 logger.error(
                     f"Download subprocess failed with exit code {task_obj.process.returncode}: {error_output}"
                 )
                 
-                # Parse specific error types
                 if "RepositoryNotFoundError" in error_output:
                     task_obj.error_message = f"Repository not found: {model.hf_repo}"
                 elif "RevisionNotFoundError" in error_output:
                     task_obj.error_message = f"Revision not found: {model.hf_commit}"
                 else:
-                    task_obj.error_message = error_output[:500]  # Truncate long errors
+                    task_obj.error_message = error_output[:500]
                 
                 task_obj.status = ModelStatus.PARTIAL
                 return
             
             logger.info(f"Download completed for {task_id}, verifying...")
             
-            # Verify download success
             if self._verify_download_success(model):
                 task_obj.status = ModelStatus.DOWNLOADED
                 logger.info(f"Successfully downloaded and verified model {task_id}")
@@ -388,7 +456,6 @@ class ModelManager:
         """
         task_id = self._get_task_id(model)
         
-        # Check if there's an active or recent download task
         if task_id in self._download_tasks:
             task = self._download_tasks[task_id]
             
@@ -407,21 +474,18 @@ class ModelManager:
                 error_message=task.error_message
             )
         
-        # Check cache state (no active task)
         if self.is_model_exist(model):
             return ModelStatusResponse(
                 model=model,
                 status=ModelStatus.DOWNLOADED
             )
         
-        # Check if there are partial files in cache
         if self._has_partial_files(model):
             return ModelStatusResponse(
                 model=model,
                 status=ModelStatus.PARTIAL
             )
         
-        # Nothing in cache
         return ModelStatusResponse(
             model=model,
             status=ModelStatus.NOT_FOUND
@@ -471,7 +535,6 @@ class ModelManager:
         task_id = self._get_task_id(model)
         was_downloading = False
         
-        # Cancel active download if in progress
         if task_id in self._download_tasks:
             task = self._download_tasks[task_id]
             if task.status == ModelStatus.DOWNLOADING:
@@ -492,7 +555,6 @@ class ModelManager:
         
         repo = next((r for r in cache_info.repos if r.repo_id == model.hf_repo), None)
         if not repo:
-            # No files in cache
             if was_downloading:
                 logger.info(f"Download cancelled for {task_id}, no files in cache to clean up")
                 return "cancelled"
@@ -500,7 +562,6 @@ class ModelManager:
                 raise ValueError(f"Model {task_id} not found in cache")
         
         if model.hf_commit:
-            # Delete a specific revision
             revision = next((r for r in repo.revisions if r.commit_hash == model.hf_commit), None)
             if not revision:
                 if was_downloading:
@@ -510,7 +571,6 @@ class ModelManager:
                     raise ValueError(f"Revision {model.hf_commit} not found")
             revisions_to_delete = [revision.commit_hash]
         else:
-            # Delete all revisions for the repo
             revisions_to_delete = [r.commit_hash for r in repo.revisions]
         
         if not revisions_to_delete:
@@ -520,7 +580,6 @@ class ModelManager:
             else:
                 raise ValueError(f"No revisions found to delete for {task_id}")
         
-        # Delete the files
         strategy = cache_info.delete_revisions(*revisions_to_delete)
         action = "Cleaning up partial files" if was_downloading else "Deleting"
         logger.info(
@@ -529,7 +588,6 @@ class ModelManager:
         )
         strategy.execute()
         
-        # Remove from download tasks cache since the model is no longer available
         if task_id in self._download_tasks:
             del self._download_tasks[task_id]
             logger.debug(f"Removed {task_id} from download tasks")
@@ -555,7 +613,6 @@ class ModelManager:
                         hf_commit=revision.commit_hash
                     )
                     
-                    # Determine status
                     if self.is_model_exist(model):
                         status = ModelStatus.DOWNLOADED
                     else:
@@ -602,4 +659,3 @@ class ModelManager:
                 available_gb=0.0,
                 cache_path=self.cache_dir
             )
-
