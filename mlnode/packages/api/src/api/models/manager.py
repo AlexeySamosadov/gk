@@ -15,10 +15,7 @@ from huggingface_hub import (
     list_repo_files,
     hf_hub_download,
 )
-from huggingface_hub.utils import (
-    HfHubHTTPError,
-    EntryNotFoundError,
-)
+from huggingface_hub.utils import EntryNotFoundError
 import psutil
 
 from api.models.types import (
@@ -125,6 +122,10 @@ class DownloadTask:
             return False
         elapsed_since_progress = time.time() - self.last_progress_time
         return elapsed_since_progress > stall_timeout
+    
+    async def terminate_subprocess_for_retry(self):
+        if self.process and self.process.returncode is None:
+            await self._terminate_process_tree()
 
 
 class ModelManager:
@@ -286,7 +287,7 @@ class ModelManager:
                         f"{elapsed_since_progress:.0f}s (last size: {current_size} bytes)"
                     )
                     task_obj.should_retry = True
-                    await task_obj.cancel()
+                    await task_obj.terminate_subprocess_for_retry()
                     break
                 
                 logger.debug(
@@ -385,15 +386,17 @@ class ModelManager:
                 except asyncio.TimeoutError:
                     logger.error(f"Download timeout (24 hours) for {task_id}")
                     task_obj.error_message = "Download timeout after 24 hours"
+                    task_obj.cancelled = True
                     break
                 
-                if task_obj.cancelled and task_obj.should_retry:
+                if task_obj.should_retry:
                     if task_obj.retry_count < task_obj.max_retries:
                         logger.warning(f"Download stalled for {task_id}, will retry")
                         task_obj.retry_count += 1
                         continue
                     else:
                         task_obj.error_message = f"Download stalled after {task_obj.max_retries} retries"
+                        task_obj.cancelled = True
                         break
                 
                 if task_obj.process.returncode != 0:
@@ -401,9 +404,11 @@ class ModelManager:
                     
                     if "RepositoryNotFoundError" in error_output:
                         task_obj.error_message = f"Repository not found: {model.hf_repo}"
+                        task_obj.cancelled = True
                         break
                     elif "RevisionNotFoundError" in error_output:
                         task_obj.error_message = f"Revision not found: {model.hf_commit}"
+                        task_obj.cancelled = True
                         break
                     
                     if task_obj.retry_count < task_obj.max_retries:
@@ -412,6 +417,7 @@ class ModelManager:
                         continue
                     else:
                         task_obj.error_message = error_output[:500]
+                        task_obj.cancelled = True
                         break
                 
                 logger.info(f"Download completed for {task_id}, verifying...")
@@ -427,6 +433,7 @@ class ModelManager:
                         continue
                     else:
                         task_obj.error_message = "Download verification failed after retries"
+                        task_obj.cancelled = True
                         break
             
             task_obj.status = ModelStatus.PARTIAL
