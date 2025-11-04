@@ -99,8 +99,11 @@ class ValidationTests : TestermintTest() {
         val excluded = participants.excludedParticipants.firstOrNull()
         assertNotNull(excluded, "Participant was not excluded")
         assertThat(excluded.address).isEqualTo(genesis.node.getColdAddress())
+        val genesisValidatorInfo = genesis.node.getValidatorInfo()
         val validators = genesis.node.getValidators()
-        assertThat(validators.validators).hasSize(2)
+        assertThat(validators.validators).hasSize(3)
+        val genesisValidator = validators.validators.first { it.consensusPubkey.value ==  genesisValidatorInfo.key }
+        assertThat(genesisValidator.tokens).isEqualTo(0)
     }
 
     @Test
