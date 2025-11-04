@@ -1,5 +1,7 @@
+import asyncio
 from typing import Optional
 from enum import Enum
+from multiprocessing import Queue, Value, Lock
 from pydantic import BaseModel
 
 from pow.models.utils import Params
@@ -45,6 +47,10 @@ class PowManager(IManager):
         self.pow_controller: Optional[ParallelController] = None
         self.pow_sender: Optional[Sender] = None
         self.init_request: Optional[PowInitRequest] = None
+        self.websocket_out_queue: Optional[Queue] = None
+        self.websocket_ack_queue: Optional[Queue] = None
+        self.websocket_connected: Optional[Value] = None
+        self.websocket_lock: Optional[Lock] = None
 
     def switch_to_pow(
         self,
@@ -56,6 +62,12 @@ class PowManager(IManager):
         
         self.init(init_request)
         self.start()
+    
+    async def switch_to_pow_async(
+        self,
+        init_request: PowInitRequest
+    ):
+        return await asyncio.to_thread(self.switch_to_pow, init_request)
 
     def init(
         self,
@@ -73,6 +85,12 @@ class PowManager(IManager):
             r_target=init_request.r_target,
             devices=None,
         )
+        
+        self.websocket_out_queue = Queue()
+        self.websocket_ack_queue = Queue()
+        self.websocket_connected = Value('i', 0)
+        self.websocket_lock = Lock()
+        
         self.pow_sender = Sender(
             url=init_request.url,
             generation_queue=self.pow_controller.generated_batch_queue,
@@ -80,6 +98,9 @@ class PowManager(IManager):
             phase=self.pow_controller.phase,
             r_target=self.pow_controller.r_target,
             fraud_threshold=init_request.fraud_threshold,
+            websocket_out_queue=self.websocket_out_queue,
+            websocket_ack_queue=self.websocket_ack_queue,
+            websocket_connected=self.websocket_connected,
         )
 
     def _start(self):
@@ -111,7 +132,6 @@ class PowManager(IManager):
     def _stop(self):
         self.pow_controller.stop()
         self.pow_sender.stop()
-        self.pow_sender.stop()
         self.pow_sender.join(timeout=5)
 
         if self.pow_sender.is_alive():
@@ -120,6 +140,10 @@ class PowManager(IManager):
         self.pow_controller = None
         self.pow_sender = None
         self.init_request = None
+        self.websocket_out_queue = None
+        self.websocket_ack_queue = None
+        self.websocket_connected = None
+        self.websocket_lock = None
 
     @staticmethod
     def phase_to_state(phase: Phase) -> PowState:

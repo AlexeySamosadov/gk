@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"decentralized-api/cosmosclient"
 	"decentralized-api/logging"
 	"decentralized-api/mlnodeclient"
 	"sync"
@@ -27,6 +28,8 @@ type NodeWorker struct {
 	wg                sync.WaitGroup
 	availableVersions map[string]bool
 	versionsMu        sync.Mutex
+	wsClient          *WebSocketClient
+	wsClientMu        sync.Mutex
 }
 
 // NewNodeWorkerWithClient creates a new worker with a custom client (for testing)
@@ -154,6 +157,33 @@ func (w *NodeWorker) GetClient() mlnodeclient.MLNodeClient {
 	w.clientMu.RLock()
 	defer w.clientMu.RUnlock()
 	return w.mlClient
+}
+
+func (w *NodeWorker) startWebSocket(recorder cosmosclient.CosmosMessageClient) {
+	w.wsClientMu.Lock()
+	defer w.wsClientMu.Unlock()
+
+	if w.wsClient != nil {
+		logging.Warn("WebSocket. Client already started for node", types.PoC, "nodeId", w.nodeId)
+		return
+	}
+
+	pocURL := w.node.Node.PoCUrl()
+	w.wsClient = NewWebSocketClient(w.nodeId, pocURL, recorder)
+	w.wsClient.Start()
+	
+	logging.Info("WebSocket. Started client for node", types.PoC, "nodeId", w.nodeId)
+}
+
+func (w *NodeWorker) stopWebSocket() {
+	w.wsClientMu.Lock()
+	defer w.wsClientMu.Unlock()
+
+	if w.wsClient != nil {
+		w.wsClient.Stop()
+		w.wsClient = nil
+		logging.Info("WebSocket. Stopped client for node", types.PoC, "nodeId", w.nodeId)
+	}
 }
 
 // NodeWorkGroup manages parallel execution across multiple node workers

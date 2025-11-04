@@ -19,10 +19,9 @@ async def lifespan(app: FastAPI):
     logger.info("App is starting...")
     yield
     logger.info("App is shutting down...")
-    controller = app.state.controller
-    if controller is not None:
-        controller.stop()
-        controller.terminate()
+    pow_manager = app.state.pow_manager
+    if pow_manager is not None and pow_manager.is_running():
+        pow_manager.stop()
 
 
 app = FastAPI(lifespan=lifespan)

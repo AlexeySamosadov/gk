@@ -9,24 +9,28 @@ import (
 )
 
 type Server struct {
-	e        *echo.Echo
-	recorder cosmos_client.CosmosMessageClient
-	broker   *broker.Broker
+	e            *echo.Echo
+	recorder     cosmos_client.CosmosMessageClient
+	broker       *broker.Broker
+	batchHandler *broker.BatchHandler
 }
 
 // TODO breacking changes: url path, support on mlnode side
-func NewServer(recorder cosmos_client.CosmosMessageClient, broker *broker.Broker) *Server {
+func NewServer(recorder cosmos_client.CosmosMessageClient, brokerInstance *broker.Broker) *Server {
 	e := echo.New()
 
 	e.HTTPErrorHandler = middleware.TransparentErrorHandler
+	
+	batchHandler := broker.NewBatchHandler(recorder)
 
 	e.Use(middleware.LoggingMiddleware)
 	g := e.Group("/mlnode/v1/")
 
 	s := &Server{
-		e:        e,
-		recorder: recorder,
-		broker:   broker,
+		e:            e,
+		recorder:     recorder,
+		broker:       brokerInstance,
+		batchHandler: batchHandler,
 	}
 
 	// keep old paths too for backward compatibility

@@ -2,6 +2,7 @@ package event_listener
 
 import (
 	"context"
+	"decentralized-api/cosmosclient"
 	"decentralized-api/internal/poc"
 	"decentralized-api/internal/validation"
 	"decentralized-api/mlnodeclient"
@@ -207,7 +208,8 @@ func createIntegrationTestSetup(reconcilialtionConfig *MlNodeReconciliationConfi
 		PubKey:  "some-pub-key",
 	}
 	mockConfigManager := &apiconfig.ConfigManager{}
-	nodeBroker := broker.NewBroker(mockChainBridge, phaseTracker, &participantInfo, "http://localhost:8080/poc", mockClientFactory, mockConfigManager)
+	mockRecorder := &cosmosclient.MockCosmosMessageClient{}
+	nodeBroker := broker.NewBroker(mockChainBridge, phaseTracker, &participantInfo, "http://localhost:8080/poc", mockClientFactory, mockConfigManager, mockRecorder)
 
 	// Create real PoC orchestrator (not mocked - we want to test the real flow)
 	pocOrchestrator := poc.NewNodePoCOrchestrator(

@@ -30,6 +30,10 @@ func (c StopNodeCommand) Execute(ctx context.Context, worker *NodeWorker) NodeRe
 		return result
 	}
 
+	if worker.node.State.CurrentStatus == types.HardwareNodeStatus_POC {
+		worker.stopWebSocket()
+	}
+
 	err := worker.GetClient().Stop(ctx)
 	if err != nil {
 		logging.Error("Failed to stop node", types.Nodes, "node_id", worker.nodeId, "error", err)
@@ -106,6 +110,8 @@ func (c StartPoCNodeCommand) Execute(ctx context.Context, worker *NodeWorker) No
 		result.FinalStatus = types.HardwareNodeStatus_POC
 		result.FinalPocStatus = PocStatusGenerating
 		logging.Info("[StartPoCNodeCommand] Successfully started PoC on node", types.PoC, "node_id", worker.nodeId)
+		
+		worker.startWebSocket(worker.broker.GetRecorder())
 	}
 	return result
 }
@@ -171,6 +177,8 @@ func (c InitValidateNodeCommand) Execute(ctx context.Context, worker *NodeWorker
 		result.FinalStatus = types.HardwareNodeStatus_POC
 		result.FinalPocStatus = PocStatusValidating
 		logging.Info("Successfully transitioned node to PoC init validate stage", types.PoC, "node_id", worker.nodeId)
+		
+		worker.startWebSocket(worker.broker.GetRecorder())
 	}
 	return result
 }

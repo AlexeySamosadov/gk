@@ -3,6 +3,7 @@ package broker
 import (
 	"decentralized-api/apiconfig"
 	"decentralized-api/chainphase"
+	"decentralized-api/cosmosclient"
 	"decentralized-api/mlnodeclient"
 	"decentralized-api/participant"
 	"testing"
@@ -105,7 +106,8 @@ func NewTestBroker() *Broker {
 	mockChainBridge.On("GetEpochGroupDataByModelId", uint64(100), "model1").Return(model1EpochData, nil)
 
 	mockConfigManager := &apiconfig.ConfigManager{}
-	return NewBroker(mockChainBridge, phaseTracker, participantInfo, "", mlnodeclient.NewMockClientFactory(), mockConfigManager)
+	mockRecorder := &cosmosclient.MockCosmosMessageClient{}
+	return NewBroker(mockChainBridge, phaseTracker, participantInfo, "", mlnodeclient.NewMockClientFactory(), mockConfigManager, mockRecorder)
 }
 
 func TestSingleNode(t *testing.T) {
