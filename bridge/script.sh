@@ -152,8 +152,7 @@ start_geth() {
          --http.addr 0.0.0.0 \
          --http.port $GETH_HTTP_PORT \
          --http.api "eth,net,engine" \
-          --ipcdisable \
-         --bridge.apibase $BRIDGE_API_BASE \
+         --ipcdisable \
          --bridge.postblock $BRIDGE_POSTBLOCK \
          --bridge.getaddresses $BRIDGE_GETADDRESSES \
          --authrpc.addr 127.0.0.1 \
@@ -181,7 +180,6 @@ start_geth() {
                  --http.port $GETH_HTTP_PORT \
                  --http.api "eth,net,engine" \
                  --ipcdisable \
-                 --bridge.apibase $BRIDGE_API_BASE \
                  --bridge.postblock $BRIDGE_POSTBLOCK \
                  --bridge.getaddresses $BRIDGE_GETADDRESSES \
                  --authrpc.addr 127.0.0.1 \
