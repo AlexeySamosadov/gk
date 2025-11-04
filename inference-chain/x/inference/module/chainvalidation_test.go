@@ -122,10 +122,11 @@ func TestComputeNewWeightsWithStakingValidators(t *testing.T) {
 	}
 
 	// Call the function
-	result := am.ComputeNewWeights(ctx, upcomingEpoch)
+	result, confirmationWeights := am.ComputeNewWeights(ctx, upcomingEpoch)
 
 	// Verify the result
 	require.Equal(t, 1, len(result))
+	_ = confirmationWeights // May be nil if no confirmation PoC events
 }
 
 func TestCollateralGracePeriod(t *testing.T) {
@@ -624,11 +625,11 @@ func TestComputeNewWeights(t *testing.T) {
 				PocStartBlockHeight: 100,
 			})
 
-			// Call the function
-			result := am.ComputeNewWeights(ctx, upcomingEpoch)
+		// Call the function
+		result, _ := am.ComputeNewWeights(ctx, upcomingEpoch)
 
-			// Verify the result
-			require.Equal(t, tt.expectedParticipants, len(result))
+		// Verify the result
+		require.Equal(t, tt.expectedParticipants, len(result))
 		})
 	}
 }

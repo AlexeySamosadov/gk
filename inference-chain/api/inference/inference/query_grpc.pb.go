@@ -83,6 +83,7 @@ const (
 	Query_MLNodeVersion_FullMethodName                             = "/inference.inference.Query/MLNodeVersion"
 	Query_TrainingAllowList_FullMethodName                         = "/inference.inference.Query/TrainingAllowList"
 	Query_ExcludedParticipants_FullMethodName                      = "/inference.inference.Query/ExcludedParticipants"
+	Query_ActiveConfirmationPoCEvent_FullMethodName                = "/inference.inference.Query/ActiveConfirmationPoCEvent"
 )
 
 // QueryClient is the client API for Query service.
@@ -197,6 +198,8 @@ type QueryClient interface {
 	TrainingAllowList(ctx context.Context, in *QueryTrainingAllowListRequest, opts ...grpc.CallOption) (*QueryTrainingAllowListResponse, error)
 	// Queries the list of excluded participants for an epoch (0 = current epoch).
 	ExcludedParticipants(ctx context.Context, in *QueryExcludedParticipantsRequest, opts ...grpc.CallOption) (*QueryExcludedParticipantsResponse, error)
+	// Queries the currently active confirmation PoC event.
+	ActiveConfirmationPoCEvent(ctx context.Context, in *QueryActiveConfirmationPoCEventRequest, opts ...grpc.CallOption) (*QueryActiveConfirmationPoCEventResponse, error)
 }
 
 type queryClient struct {
@@ -783,6 +786,15 @@ func (c *queryClient) ExcludedParticipants(ctx context.Context, in *QueryExclude
 	return out, nil
 }
 
+func (c *queryClient) ActiveConfirmationPoCEvent(ctx context.Context, in *QueryActiveConfirmationPoCEventRequest, opts ...grpc.CallOption) (*QueryActiveConfirmationPoCEventResponse, error) {
+	out := new(QueryActiveConfirmationPoCEventResponse)
+	err := c.cc.Invoke(ctx, Query_ActiveConfirmationPoCEvent_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueryServer is the server API for Query service.
 // All implementations must embed UnimplementedQueryServer
 // for forward compatibility
@@ -895,6 +907,8 @@ type QueryServer interface {
 	TrainingAllowList(context.Context, *QueryTrainingAllowListRequest) (*QueryTrainingAllowListResponse, error)
 	// Queries the list of excluded participants for an epoch (0 = current epoch).
 	ExcludedParticipants(context.Context, *QueryExcludedParticipantsRequest) (*QueryExcludedParticipantsResponse, error)
+	// Queries the currently active confirmation PoC event.
+	ActiveConfirmationPoCEvent(context.Context, *QueryActiveConfirmationPoCEventRequest) (*QueryActiveConfirmationPoCEventResponse, error)
 	mustEmbedUnimplementedQueryServer()
 }
 
@@ -1093,6 +1107,9 @@ func (UnimplementedQueryServer) TrainingAllowList(context.Context, *QueryTrainin
 }
 func (UnimplementedQueryServer) ExcludedParticipants(context.Context, *QueryExcludedParticipantsRequest) (*QueryExcludedParticipantsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExcludedParticipants not implemented")
+}
+func (UnimplementedQueryServer) ActiveConfirmationPoCEvent(context.Context, *QueryActiveConfirmationPoCEventRequest) (*QueryActiveConfirmationPoCEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ActiveConfirmationPoCEvent not implemented")
 }
 func (UnimplementedQueryServer) mustEmbedUnimplementedQueryServer() {}
 
@@ -2259,6 +2276,24 @@ func _Query_ExcludedParticipants_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Query_ActiveConfirmationPoCEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryActiveConfirmationPoCEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).ActiveConfirmationPoCEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Query_ActiveConfirmationPoCEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).ActiveConfirmationPoCEvent(ctx, req.(*QueryActiveConfirmationPoCEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Query_ServiceDesc is the grpc.ServiceDesc for Query service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2521,6 +2556,10 @@ var Query_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExcludedParticipants",
 			Handler:    _Query_ExcludedParticipants_Handler,
+		},
+		{
+			MethodName: "ActiveConfirmationPoCEvent",
+			Handler:    _Query_ActiveConfirmationPoCEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

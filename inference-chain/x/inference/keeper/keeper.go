@@ -49,19 +49,21 @@ type (
 		UnitOfComputePriceProposals   collections.Map[string, types.UnitOfComputePriceProposal]
 		EpochGroupDataMap             collections.Map[collections.Pair[uint64, string], types.EpochGroupData]
 		// Epoch collections
-		Epochs                    collections.Map[uint64, types.Epoch]
-		EffectiveEpochIndex       collections.Item[uint64]
-		EpochGroupValidationsMap  collections.Map[collections.Pair[uint64, string], types.EpochGroupValidations]
-		SettleAmounts             collections.Map[sdk.AccAddress, types.SettleAmount]
-		TopMiners                 collections.Map[sdk.AccAddress, types.TopMiner]
-		PartialUpgrades           collections.Map[uint64, types.PartialUpgrade]
-		EpochPerformanceSummaries collections.Map[collections.Pair[sdk.AccAddress, uint64], types.EpochPerformanceSummary]
-		TrainingExecAllowListSet  collections.KeySet[sdk.AccAddress]
-		TrainingStartAllowListSet collections.KeySet[sdk.AccAddress]
-		PruningState              collections.Item[types.PruningState]
-		InferencesToPrune         collections.Map[collections.Pair[int64, string], collections.NoValue]
-		ActiveInvalidations       collections.KeySet[collections.Pair[sdk.AccAddress, string]]
-		ExcludedParticipantsMap   collections.Map[collections.Pair[uint64, sdk.AccAddress], types.ExcludedParticipant]
+		Epochs                         collections.Map[uint64, types.Epoch]
+		EffectiveEpochIndex            collections.Item[uint64]
+		EpochGroupValidationsMap       collections.Map[collections.Pair[uint64, string], types.EpochGroupValidations]
+		SettleAmounts                  collections.Map[sdk.AccAddress, types.SettleAmount]
+		TopMiners                      collections.Map[sdk.AccAddress, types.TopMiner]
+		PartialUpgrades                collections.Map[uint64, types.PartialUpgrade]
+		EpochPerformanceSummaries      collections.Map[collections.Pair[sdk.AccAddress, uint64], types.EpochPerformanceSummary]
+		TrainingExecAllowListSet       collections.KeySet[sdk.AccAddress]
+		TrainingStartAllowListSet      collections.KeySet[sdk.AccAddress]
+		PruningState                   collections.Item[types.PruningState]
+		InferencesToPrune              collections.Map[collections.Pair[int64, string], collections.NoValue]
+		ActiveInvalidations            collections.KeySet[collections.Pair[sdk.AccAddress, string]]
+		ExcludedParticipantsMap        collections.Map[collections.Pair[uint64, sdk.AccAddress], types.ExcludedParticipant]
+		ConfirmationPoCEvents          collections.Map[collections.Pair[uint64, uint64], types.ConfirmationPoCEvent]
+		ActiveConfirmationPoCEventItem collections.Item[types.ConfirmationPoCEvent]
 	}
 )
 
@@ -279,6 +281,19 @@ func NewKeeper(
 			"excluded_participants",
 			collections.PairKeyCodec(collections.Uint64Key, sdk.AccAddressKey),
 			codec.CollValue[types.ExcludedParticipant](cdc),
+		),
+		ConfirmationPoCEvents: collections.NewMap(
+			sb,
+			types.ConfirmationPoCEventsPrefix,
+			"confirmation_poc_events",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key),
+			codec.CollValue[types.ConfirmationPoCEvent](cdc),
+		),
+		ActiveConfirmationPoCEventItem: collections.NewItem(
+			sb,
+			types.ActiveConfirmationPoCEventPrefix,
+			"active_confirmation_poc_event",
+			codec.CollValue[types.ConfirmationPoCEvent](cdc),
 		),
 	}
 	// Build the collections schema

@@ -175,6 +175,15 @@ func GetParticipantPoCWeight(participant string, epochGroupData *types.EpochGrou
 				return 0
 			}
 			baseWeight = uint64(validationWeight.Weight)
+			
+			// TODO: Implement reward capping using confirmation weights
+			// For participants with confirmation PoC data, use min(weight, confirmationWeight)
+			// to cap rewards at demonstrated compute capacity rather than claimed capacity.
+			// Note: Must handle preserved weight + confirmation weight logic correctly:
+			// - POC_SLOT=true nodes: use regular weight (continue inference, not subject to confirmation)
+			// - POC_SLOT=false nodes: use min(weight, confirmationWeight) if confirmationWeight > 0
+			// This ensures nodes cannot earn rewards based on compute capacity they no longer maintain.
+			
 			break
 		}
 	}

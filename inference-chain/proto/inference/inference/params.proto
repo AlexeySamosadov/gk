@@ -19,6 +19,7 @@ message Params {
   BitcoinRewardParams bitcoin_reward_params = 6;
   DynamicPricingParams dynamic_pricing_params = 7;
   BandwidthLimitsParams bandwidth_limits_params = 8;
+  ConfirmationPoCParams confirmation_poc_params = 9;
 }
 
 message GenesisOnlyParams {
@@ -200,4 +201,18 @@ message BandwidthLimitsParams {
   // The curve for the tanh function for determining how quickly traffic expands the
   // max invalidations allowed
   uint64 invalidations_limit_curve = 6;
+}
+
+// ConfirmationPoCParams defines the parameters for confirmation PoC feature.
+message ConfirmationPoCParams {
+  option (gogoproto.equal) = true;
+
+  // expected_confirmations_per_epoch is N in the trigger probability formula (e.g., 1)
+  uint64 expected_confirmations_per_epoch = 1;
+
+  // alpha_threshold is the minimum confirmed weight ratio (e.g., "0.70")
+  Decimal alpha_threshold = 2;
+
+  // slash_fraction is the collateral slashed for failure (e.g., "0.10")
+  Decimal slash_fraction = 3;
 }

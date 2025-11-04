@@ -45,6 +45,8 @@ var (
 	InferencesToPrunePrefix          = collections.NewPrefix(22)
 	ActiveInvalidationsPrefix        = collections.NewPrefix(23)
 	ExcludedParticipantsPrefix       = collections.NewPrefix(24)
+	ConfirmationPoCEventsPrefix      = collections.NewPrefix(25)
+	ActiveConfirmationPoCEventPrefix = collections.NewPrefix(26)
 	ParamsKey                        = []byte("p_inference")
 )
 

@@ -31,6 +31,7 @@ import "inference/inference/stats_developer.proto";
 import "inference/inference/epoch.proto";
 import "inference/inference/mlnode_version.proto";
 import "inference/inference/excluded_participant.proto";
+import "inference/inference/confirmation_poc_event.proto";
 
 option go_package = "github.com/productscience/inference/x/inference/types";
 
@@ -378,6 +379,12 @@ service Query {
   // Queries the list of excluded participants for an epoch (0 = current epoch).
   rpc ExcludedParticipants (QueryExcludedParticipantsRequest) returns (QueryExcludedParticipantsResponse) {
     option (google.api.http).get = "/productscience/inference/inference/excluded_participants/{epoch_index}";
+
+  }
+
+  // Queries the currently active confirmation PoC event.
+  rpc ActiveConfirmationPoCEvent (QueryActiveConfirmationPoCEventRequest) returns (QueryActiveConfirmationPoCEventResponse) {
+    option (google.api.http).get = "/productscience/inference/inference/active_confirmation_poc_event";
 
   }
 }
@@ -860,9 +867,11 @@ message QueryAllBridgeTransactionsResponse {
 message QueryEpochInfoRequest {}
 
 message QueryEpochInfoResponse {
-  int64  block_height = 1;
-  Params params       = 2 [(gogoproto.nullable) = false];
-  Epoch  latest_epoch = 3 [(gogoproto.nullable) = false];
+  int64                 block_height                  = 1;
+  Params                params                        = 2 [(gogoproto.nullable) = false];
+  Epoch                 latest_epoch                  = 3 [(gogoproto.nullable) = false];
+  bool                  is_confirmation_poc_active    = 4;
+  ConfirmationPoCEvent  active_confirmation_poc_event = 5;
 }
 
 message QueryCountPoCbatchesAtHeightRequest {
@@ -960,4 +969,13 @@ message QueryExcludedParticipantsRequest {
 // QueryExcludedParticipantsResponse returns a list of excluded participants for the epoch.
 message QueryExcludedParticipantsResponse {
   repeated ExcludedParticipant items = 1;
+}
+
+// QueryActiveConfirmationPoCEventRequest is request type for the Query/ActiveConfirmationPoCEvent RPC method.
+message QueryActiveConfirmationPoCEventRequest {}
+
+// QueryActiveConfirmationPoCEventResponse is response type for the Query/ActiveConfirmationPoCEvent RPC method.
+message QueryActiveConfirmationPoCEventResponse {
+  bool                 is_active = 1;
+  ConfirmationPoCEvent event     = 2;
 }

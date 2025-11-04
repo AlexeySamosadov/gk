@@ -222,6 +222,14 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	blockHeight := sdkCtx.BlockHeight()
 	blockTime := sdkCtx.BlockTime().Unix()
+
+	// Handle confirmation PoC trigger decisions and phase transitions
+	err := am.handleConfirmationPoC(ctx, blockHeight)
+	if err != nil {
+		am.LogError("Failed to handle confirmation PoC", types.PoC, "error", err)
+		// Don't return error - allow block processing to continue
+	}
+
 	params, err := am.keeper.GetParamsSafe(ctx)
 	if err != nil {
 		am.LogError("Unable to get parameters", types.Settle, "error", err.Error())
@@ -398,7 +406,7 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		return
 	}
 
-	activeParticipants := am.ComputeNewWeights(ctx, *upcomingEpoch)
+	activeParticipants, confirmationWeights := am.ComputeNewWeights(ctx, *upcomingEpoch)
 	if activeParticipants == nil {
 		am.LogError("onEndOfPoCValidationStage: computeResult == nil && activeParticipants == nil", types.PoC)
 		return
@@ -449,7 +457,7 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		return
 	}
 
-	am.addEpochMembers(ctx, upcomingEg, activeParticipants)
+	am.addEpochMembers(ctx, upcomingEg, activeParticipants, confirmationWeights)
 
 	// Call BLS module to initiate key generation for the new epoch
 	am.InitiateBLSKeyGeneration(ctx, upcomingEpoch.Index, activeParticipants)
@@ -498,7 +506,7 @@ func (am AppModule) onSetNewValidatorsStage(ctx context.Context, blockHeight int
 	am.moveUpcomingToEffectiveGroup(ctx, blockHeight, unitOfComputePrice)
 }
 
-func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.EpochGroup, activeParticipants []*types.ActiveParticipant) {
+func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.EpochGroup, activeParticipants []*types.ActiveParticipant, confirmationWeights map[string]int64) {
 	validationParams := am.keeper.GetParams(ctx).ValidationParams
 
 	for _, p := range activeParticipants {
@@ -512,7 +520,16 @@ func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.
 				"participantIndex", p.Index)
 			continue
 		}
-		member := epochgroup.NewEpochMemberFromActiveParticipant(p, reputation)
+		
+		// Get confirmation weight for this participant (if available)
+		confirmationWeight := int64(0)
+		if confirmationWeights != nil {
+			if cw, found := confirmationWeights[p.Index]; found {
+				confirmationWeight = cw
+			}
+		}
+		
+		member := epochgroup.NewEpochMemberFromActiveParticipant(p, reputation, confirmationWeight)
 		err = upcomingEg.AddMember(ctx, member)
 		if err != nil {
 			am.LogError("onSetNewValidatorsStage: Unable to add member", types.EpochGroup, "error", err.Error())

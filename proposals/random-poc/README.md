@@ -21,7 +21,7 @@ Add Random Confirmation PoC mechanism to verify inference-serving nodes maintain
 
 **Constraint**: Confirmation PoC never overlaps with regular PoC phase - only triggers during inference phase.
 
-**Execution**: When triggered, inference-serving nodes (`POC_SLOT=false`) switch to PoC mode:
+**Execution**: When triggered, nodes which not preserved to serve inference during POC (`POC_SLOT=false`) switch to PoC mode:
 - Generate PoC nonces using standard computational parameters with block hash from (generation_start_height - 1)
 - Submit `MsgSubmitPoCBatch` transactions
 - Continue for confirmation window duration  
@@ -32,6 +32,14 @@ Add Random Confirmation PoC mechanism to verify inference-serving nodes maintain
 This proves nodes maintain the computational capacity they claimed during regular PoC phase.
 
 **ML Nodes** with `POC_SLOT=true` continue serving inference - their compute capacity is not verified during this event.
+
+**POC_SLOT Timing and Weight Verification**: Confirmation PoC uses the current epoch's POC_SLOT allocation to determine which nodes participate. During epoch N's inference phase:
+- Verification targets: Nodes with `POC_SLOT=false` in current epoch N (scheduled to do PoC at start of epoch N+1)
+- This verifies BOTH types of weights:
+  - Fresh weights: Computed during epoch N's PoC phase (these nodes had `POC_SLOT=false` at start of epoch N)
+  - Preserved weights: Carried forward from earlier epochs (these nodes had `POC_SLOT=true` at start of epoch N, but now have `POC_SLOT=false`)
+
+**Question**: Using current epoch's POC_SLOT means we verify preserved weights that were NOT re-computed during this epoch's PoC phase. Alternative approach: use previous epoch's POC_SLOT to verify only weights that were just computed during epoch N. Current implementation verifies all weights contributing to rewards regardless of when computed.
 
 ### Enforcement
 

@@ -44,7 +44,7 @@ func newPhaseTrackerWithPhase(t *testing.T, phase types.EpochPhase) *chainphase.
 	}
 
 	block := chainphase.BlockInfo{Height: blockHeight}
-	tracker.Update(block, epoch, params, true)
+	tracker.Update(block, epoch, params, true, nil)
 
 	return tracker
 }
