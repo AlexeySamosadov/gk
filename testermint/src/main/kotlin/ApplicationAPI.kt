@@ -2,6 +2,7 @@ package com.productscience
 
 import com.github.kittinunf.fuel.Fuel
 import com.github.kittinunf.fuel.core.FuelError
+import com.github.kittinunf.fuel.core.HttpException
 import com.github.kittinunf.fuel.core.Request
 import com.github.kittinunf.fuel.core.Response
 import com.github.kittinunf.fuel.core.extensions.jsonBody
@@ -18,10 +19,6 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import com.github.kittinunf.fuel.core.HttpException
 
 const val SERVER_TYPE_PUBLIC = "public"
 const val SERVER_TYPE_ML = "ml"
@@ -341,10 +338,18 @@ data class ApplicationAPI(
 
     inline fun <reified Out : Any> get(url: String, path: String): Out {
         val response = Fuel.get("$url/$path")
-            .responseObject<Out>(gsonDeserializer(cosmosJson))
+            .responseString()
         logResponse(response)
 
-        return response.third.get()
+        val body = response.third.get() // throws on HTTP error
+        Logger.trace("Response body: {}", body) // Always log successful response bodies
+
+        return try {
+            cosmosJson.fromJson(body, Out::class.java)
+        } catch (e: Exception) {
+            Logger.error(e, "JSON parse error for url={} body={}", "$url/$path", body)
+            throw e
+        }
     }
 
     inline fun <reified In : Any, reified Out : Any> post(url: String, path: String, body: In): Out {
@@ -381,22 +386,14 @@ data class ApplicationAPI(
      * @return ApiConfig containing the parsed configuration
      */
     fun getConfig(): ApiConfig = wrapLog("GetConfig", false) {
-        val yamlOutput = executor.exec(listOf("cat", "/root/.dapi/api-config.yaml"), null)
-        val yamlContent = yamlOutput.joinToString("")
-
-        val mapper = ObjectMapper(YAMLFactory())
-            .registerKotlinModule()
-
-        // Configure Jackson to automatically convert between snake_case YAML and camelCase Kotlin properties
-        mapper.propertyNamingStrategy = com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE
-
-        mapper.readValue(yamlContent, ApiConfig::class.java)
+        val url = urlFor(SERVER_TYPE_ADMIN)
+        get<ApiConfig>(url, "admin/v1/config")
     }
 
 }
 
 
-fun logResponse(reqData: Triple<Request, Response, Result<*, FuelError>>, throwError:Boolean = false) {
+fun logResponse(reqData: Triple<Request, Response, Result<*, FuelError>>, throwError: Boolean = false) {
     val (request, response, result) = reqData
     Logger.debug("Request: {} {}", request.method, request.url)
     Logger.trace("Request headers: {}", request.headers)
