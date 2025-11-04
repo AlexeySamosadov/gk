@@ -81,7 +81,7 @@ func setupTestServer(t *testing.T) (*Server, *apiconfig.ConfigManager, *mlnodecl
 	mockCosmos.On("GetContext").Return(context.Background())
 
 	// 3. Broker
-	nodeBroker := broker.NewBroker(bridge, nil, mockParticipant, "", mockClientFactory, configManager)
+	nodeBroker := broker.NewBroker(bridge, nil, mockParticipant, "", mockClientFactory, configManager, mockCosmos)
 
 	// 4. Server
 	s := NewServer(mockCosmos, nodeBroker, configManager, nil)

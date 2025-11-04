@@ -117,6 +117,7 @@ type Broker struct {
 	lastEpochPhase       types.EpochPhase
 	statusQueryTrigger   chan struct{}
 	configManager        *apiconfig.ConfigManager
+	recorder             cosmosclient.CosmosMessageClient
 }
 
 const (
@@ -297,7 +298,7 @@ type NodeResponse struct {
 	State NodeState `json:"state"`
 }
 
-func NewBroker(chainBridge BrokerChainBridge, phaseTracker *chainphase.ChainPhaseTracker, participantInfo participant.CurrenParticipantInfo, callbackUrl string, clientFactory mlnodeclient.ClientFactory, configManager *apiconfig.ConfigManager) *Broker {
+func NewBroker(chainBridge BrokerChainBridge, phaseTracker *chainphase.ChainPhaseTracker, participantInfo participant.CurrenParticipantInfo, callbackUrl string, clientFactory mlnodeclient.ClientFactory, configManager *apiconfig.ConfigManager, recorder cosmosclient.CosmosMessageClient) *Broker {
 	broker := &Broker{
 		highPriorityCommands: make(chan Command, 100),
 		lowPriorityCommands:  make(chan Command, 10000),
@@ -310,6 +311,7 @@ func NewBroker(chainBridge BrokerChainBridge, phaseTracker *chainphase.ChainPhas
 		reconcileTrigger:     make(chan struct{}, 1),
 		statusQueryTrigger:   make(chan struct{}, 1),
 		configManager:        configManager,
+		recorder:             recorder,
 	}
 
 	// Initialize NodeWorkGroup
@@ -336,7 +338,7 @@ func (b *Broker) GetChainBridge() BrokerChainBridge {
 }
 
 func (b *Broker) GetRecorder() cosmosclient.CosmosMessageClient {
-	return b.chainBridge.(*BrokerChainBridgeImpl).client
+	return b.recorder
 }
 
 func (b *Broker) LoadNodeToBroker(node *apiconfig.InferenceNodeConfig) chan *apiconfig.InferenceNodeConfig {
