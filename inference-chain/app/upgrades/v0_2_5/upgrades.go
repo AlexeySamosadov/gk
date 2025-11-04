@@ -1,0 +1,55 @@
+package v0_2_5
+
+import (
+	"context"
+
+	upgradetypes "cosmossdk.io/x/upgrade/types"
+	"github.com/cosmos/cosmos-sdk/types/module"
+	"github.com/productscience/inference/x/inference/keeper"
+	"github.com/productscience/inference/x/inference/types"
+)
+
+// CreateUpgradeHandler defines the v0.2.5 upgrade handler.
+// Intentionally left with a blank business implementation for now.
+// It only performs the standard capability version fix and runs module migrations.
+func CreateUpgradeHandler(
+	mm *module.Manager,
+	configurator module.Configurator,
+	k keeper.Keeper,
+) upgradetypes.UpgradeHandler {
+	return func(ctx context.Context, plan upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
+		k.Logger().Info("starting upgrade to " + UpgradeName)
+
+		// Ensure capability module has a version to avoid InitGenesis panic.
+		if _, ok := fromVM["capability"]; !ok {
+			fromVM["capability"] = mm.Modules["capability"].(module.HasConsensusVersion).ConsensusVersion()
+		}
+
+		err := setNewInvalidationParams(ctx, k, fromVM)
+
+		// Run default module migrations.
+		toVM, err := mm.RunMigrations(ctx, configurator, fromVM)
+		if err != nil {
+			return toVM, err
+		}
+
+		k.Logger().Info("successfully upgraded to " + UpgradeName)
+		return toVM, nil
+	}
+}
+
+func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.VersionMap) error {
+	params, err := k.GetParamsSafe(ctx)
+	if err != nil {
+		return err
+	}
+	params.ValidationParams.InvalidReputationPreserve = types.DecimalFromFloat(0.0)
+	params.ValidationParams.BadParticipantInvalidationRate = types.DecimalFromFloat(0.1)
+	params.ValidationParams.InvalidationHThreshold = types.DecimalFromFloat(4.0)
+	params.ValidationParams.DowntimeGoodPercentage = types.DecimalFromFloat(0.1)
+	params.ValidationParams.DowntimeBadPercentage = types.DecimalFromFloat(0.2)
+	params.ValidationParams.DowntimeHThreshold = types.DecimalFromFloat(4.0)
+	params.ValidationParams.DowntimeReputationPreserve = types.DecimalFromFloat(0.0)
+	params.BandwidthLimitsParams.MinimumConcurrentInvalidations = 1
+	return k.SetParams(ctx, params)
+}

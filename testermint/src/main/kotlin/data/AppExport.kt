@@ -186,19 +186,19 @@ data class ValidationParams(
     @SerializedName("estimated_limits_per_block_kb")
     val estimatedLimitsPerBlockKb: Long,
     @SerializedName("invalid_reputation_preserve")
-    val invalidReputationPreserve: Decimal,
+    val invalidReputationPreserve: Decimal?,
     @SerializedName("bad_participant_invalidation_rate")
-    val badParticipantInvalidationRate: Decimal,
+    val badParticipantInvalidationRate: Decimal?,
     @SerializedName("invalidation_h_threshold")
-    val invalidationHThreshold: Decimal,
+    val invalidationHThreshold: Decimal?,
     @SerializedName("downtime_good_percentage")
-    val downtimeGoodPercentage: Decimal,
+    val downtimeGoodPercentage: Decimal?,
     @SerializedName("downtime_bad_percentage")
-    val downtimeBadPercentage: Decimal,
+    val downtimeBadPercentage: Decimal?,
     @SerializedName("downtime_h_threshold")
-    val downtimeHThreshold: Decimal,
+    val downtimeHThreshold: Decimal?,
     @SerializedName("downtime_reputation_preserve")
-    val downtimeReputationPreserve: Decimal,
+    val downtimeReputationPreserve: Decimal?,
 )
 
 data class BandwidthLimitsParams(
