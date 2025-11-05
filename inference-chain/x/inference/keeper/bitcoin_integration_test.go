@@ -107,30 +107,30 @@ func TestBitcoinRewardIntegration_RewardCalculationFunctions(t *testing.T) {
 			EpochIndex: 10,
 			ValidationWeights: []*types.ValidationWeight{
 				{
-					MemberAddress: "participant1",
-					Weight:        1000,
-					Reputation:    100,
-				ConfirmationWeight: 1000,
-				MlNodes: []*types.MLNodeInfo{
-					{
-						NodeId:             "participant1-node",
-						PocWeight:          1000,
-						TimeslotAllocation: []bool{true, false},
+					MemberAddress:      "participant1",
+					Weight:             1000,
+					Reputation:         100,
+					ConfirmationWeight: 1000,
+					MlNodes: []*types.MLNodeInfo{
+						{
+							NodeId:             "participant1-node",
+							PocWeight:          1000,
+							TimeslotAllocation: []bool{true, false},
+						},
 					},
-				},
 				},
 				{
-					MemberAddress: "participant2",
-					Weight:        2000,
-					Reputation:    150,
-				ConfirmationWeight: 2000,
-				MlNodes: []*types.MLNodeInfo{
-					{
-						NodeId:             "participant2-node",
-						PocWeight:          2000,
-						TimeslotAllocation: []bool{true, false},
+					MemberAddress:      "participant2",
+					Weight:             2000,
+					Reputation:         150,
+					ConfirmationWeight: 2000,
+					MlNodes: []*types.MLNodeInfo{
+						{
+							NodeId:             "participant2-node",
+							PocWeight:          2000,
+							TimeslotAllocation: []bool{true, false},
+						},
 					},
-				},
 				},
 			},
 			TotalWeight: 3000,
@@ -157,9 +157,9 @@ func TestBitcoinRewardIntegration_DistributionLogic(t *testing.T) {
 		EpochIndex: 25,
 		ValidationWeights: []*types.ValidationWeight{
 			{
-				MemberAddress: "participant1",
-				Weight:        1000,
-				Reputation:    100,
+				MemberAddress:      "participant1",
+				Weight:             1000,
+				Reputation:         100,
 				ConfirmationWeight: 1000,
 				MlNodes: []*types.MLNodeInfo{
 					{
@@ -170,9 +170,9 @@ func TestBitcoinRewardIntegration_DistributionLogic(t *testing.T) {
 				},
 			},
 			{
-				MemberAddress: "participant2",
-				Weight:        3000,
-				Reputation:    150,
+				MemberAddress:      "participant2",
+				Weight:             3000,
+				Reputation:         150,
 				ConfirmationWeight: 3000,
 				MlNodes: []*types.MLNodeInfo{
 					{
@@ -305,9 +305,9 @@ func TestBitcoinRewardIntegration_Phase2Stubs(t *testing.T) {
 		EpochIndex: 15,
 		ValidationWeights: []*types.ValidationWeight{
 			{
-				MemberAddress: "participant1",
-				Weight:        1000,
-				Reputation:    100,
+				MemberAddress:      "participant1",
+				Weight:             1000,
+				Reputation:         100,
 				ConfirmationWeight: 1000,
 				MlNodes: []*types.MLNodeInfo{
 					{

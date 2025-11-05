@@ -102,7 +102,11 @@ func (am AppModule) checkConfirmationPoCTrigger(
 	nextEpochContext := epochContext.NextEpochContext()
 	nextPoCStart := nextEpochContext.PocStartBlockHeight
 
-	confirmationWindowDuration := epochParams.PocStageDuration + epochParams.PocValidationDuration
+	// Total duration includes all phases (same as regular PoC structure)
+	confirmationWindowDuration := epochParams.PocStageDuration +
+		epochParams.PocExchangeDuration +
+		epochParams.PocValidationDelay +
+		epochParams.PocValidationDuration
 	triggerWindowEnd := nextPoCStart - epochParams.InferenceValidationCutoff - confirmationWindowDuration
 
 	if blockHeight < setNewValidatorsHeight || blockHeight > triggerWindowEnd {
@@ -156,19 +160,13 @@ func (am AppModule) checkConfirmationPoCTrigger(
 		gracePeriod = 1
 	}
 	generationStartHeight := blockHeight + gracePeriod
-	generationEndHeight := generationStartHeight + epochParams.PocStageDuration - 1
-	validationStartHeight := generationEndHeight + 1
-	validationEndHeight := validationStartHeight + epochParams.PocValidationDuration - 1
 
-	// Create new event in GRACE_PERIOD phase (poc_seed_block_hash will be set later)
+	// Create event - only store anchor, calculate rest dynamically via helper methods
 	event := types.ConfirmationPoCEvent{
 		EpochIndex:            epochContext.EpochIndex,
 		EventSequence:         eventSequence,
 		TriggerHeight:         blockHeight,
 		GenerationStartHeight: generationStartHeight,
-		GenerationEndHeight:   generationEndHeight,
-		ValidationStartHeight: validationStartHeight,
-		ValidationEndHeight:   validationEndHeight,
 		Phase:                 types.ConfirmationPoCPhase_CONFIRMATION_POC_GRACE_PERIOD,
 		PocSeedBlockHash:      "", // Will be set when transitioning to GENERATION phase
 	}
@@ -190,7 +188,7 @@ func (am AppModule) checkConfirmationPoCTrigger(
 		"eventSequence", event.EventSequence,
 		"triggerHeight", event.TriggerHeight,
 		"generationStartHeight", event.GenerationStartHeight,
-		"validationEndHeight", event.ValidationEndHeight)
+		"validationEndHeight", event.GetValidationEnd(epochParams))
 
 	return nil
 }
@@ -223,7 +221,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 	var transitions []string
 
 	// GRACE_PERIOD -> GENERATION transition
-	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_GRACE_PERIOD && blockHeight >= event.GenerationStartHeight {
+	if event.ShouldTransitionToGeneration(blockHeight) {
 		// Capture block hash from (generation_start_height - 1)
 		// At generation_start_height, HeaderInfo().Hash gives us the hash of the previous block
 		prevBlockHash := sdkCtx.HeaderInfo().Hash
@@ -242,7 +240,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 	}
 
 	// GENERATION -> VALIDATION transition
-	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_GENERATION && blockHeight >= event.ValidationStartHeight {
+	if event.ShouldTransitionToValidation(blockHeight, epochParams) {
 		event.Phase = types.ConfirmationPoCPhase_CONFIRMATION_POC_VALIDATION
 		updated = true
 		transitionCount++
@@ -252,11 +250,11 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
 			"blockHeight", blockHeight,
-			"validationStartHeight", event.ValidationStartHeight)
+			"validationStartHeight", event.GetValidationStart(epochParams))
 	}
 
 	// VALIDATION -> COMPLETED transition
-	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_VALIDATION && blockHeight >= event.ValidationEndHeight+1 {
+	if event.ShouldTransitionToCompleted(blockHeight, epochParams) {
 		event.Phase = types.ConfirmationPoCPhase_CONFIRMATION_POC_COMPLETED
 		updated = true
 		transitionCount++
@@ -282,7 +280,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
 			"blockHeight", blockHeight,
-			"validationEndHeight", event.ValidationEndHeight)
+			"validationEndHeight", event.GetValidationEnd(epochParams))
 	}
 
 	// Warn if multiple transitions occurred (catch-up scenario)

@@ -11,10 +11,7 @@ message ConfirmationPoCEvent {
   uint64 event_sequence = 2;       // Sequence number for multiple events per epoch (0, 1, 2...)
   
   int64 trigger_height = 3;        // Block height where trigger decision was made
-  int64 generation_start_height = 4;  // trigger_height + grace_period
-  int64 generation_end_height = 5;    // generation_start + generation_duration
-  int64 validation_start_height = 6;  // generation_end + 1
-  int64 validation_end_height = 7;    // validation_start + validation_duration
+  int64 generation_start_height = 4;  // Anchor: all other heights calculated from this + EpochParams
   
   ConfirmationPoCPhase phase = 8;     // Current phase of the event
   

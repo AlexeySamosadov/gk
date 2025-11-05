@@ -39,8 +39,9 @@ func (c StartPocCommand) Execute(b *Broker) {
 	// Confirmation PoC during inference phase
 	if epochState.CurrentPhase == types.InferencePhase && epochState.ActiveConfirmationPoCEvent != nil {
 		event := epochState.ActiveConfirmationPoCEvent
+		epochParams := &epochState.LatestEpoch.EpochParams
 		currentHeight := epochState.CurrentBlock.Height
-		if currentHeight >= event.GenerationStartHeight && currentHeight <= event.GenerationEndHeight {
+		if currentHeight >= event.GenerationStartHeight && currentHeight <= event.GetGenerationEnd(epochParams) {
 			shouldRunPoC = true
 		}
 	}
@@ -152,8 +153,9 @@ func (c InitValidateCommand) Execute(b *Broker) {
 	// Confirmation PoC validation during inference phase
 	if epochState.CurrentPhase == types.InferencePhase && epochState.ActiveConfirmationPoCEvent != nil {
 		event := epochState.ActiveConfirmationPoCEvent
+		epochParams := &epochState.LatestEpoch.EpochParams
 		currentHeight := epochState.CurrentBlock.Height
-		if currentHeight >= event.ValidationStartHeight && currentHeight <= event.ValidationEndHeight {
+		if event.IsInValidationWindow(currentHeight, epochParams) {
 			shouldValidate = true
 		}
 	}

@@ -41,13 +41,14 @@ func (k msgServer) SubmitPocValidation(goCtx context.Context, msg *types.MsgSubm
 		}
 
 		// Verify we're in the validation window
-		if currentBlockHeight < activeEvent.ValidationStartHeight || currentBlockHeight > activeEvent.ValidationEndHeight {
+		epochParams := k.GetParams(ctx).EpochParams
+		if !activeEvent.IsInValidationWindow(currentBlockHeight, epochParams) {
 			k.LogError(PocFailureTag+"[SubmitPocValidation] Confirmation PoC: outside validation window", types.PoC,
 				"participant", msg.ParticipantAddress,
 				"validatorParticipant", msg.Creator,
 				"currentBlockHeight", currentBlockHeight,
-				"validationStartHeight", activeEvent.ValidationStartHeight,
-				"validationEndHeight", activeEvent.ValidationEndHeight)
+				"validationStartHeight", activeEvent.GetValidationStart(epochParams),
+				"validationEndHeight", activeEvent.GetValidationEnd(epochParams))
 			return nil, sdkerrors.Wrap(types.ErrPocTooLate, "Confirmation PoC validation window closed")
 		}
 

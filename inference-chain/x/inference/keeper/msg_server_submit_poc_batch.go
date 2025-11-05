@@ -44,14 +44,15 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 			return nil, sdkerrors.Wrap(types.ErrPocWrongStartBlockHeight, errMsg)
 		}
 
-		// Verify we're in the generation window
-		if currentBlockHeight < activeEvent.GenerationStartHeight || currentBlockHeight > activeEvent.GenerationEndHeight {
-			k.LogError(PocFailureTag+"[SubmitPocBatch] Confirmation PoC: outside generation window", types.PoC,
+		// Verify we're in the batch submission window (generation + exchange period)
+		epochParams := k.GetParams(ctx).EpochParams
+		if !activeEvent.IsInBatchSubmissionWindow(currentBlockHeight, epochParams) {
+			k.LogError(PocFailureTag+"[SubmitPocBatch] Confirmation PoC: outside batch submission window", types.PoC,
 				"participant", msg.Creator,
 				"currentBlockHeight", currentBlockHeight,
 				"generationStartHeight", activeEvent.GenerationStartHeight,
-				"generationEndHeight", activeEvent.GenerationEndHeight)
-			return nil, sdkerrors.Wrap(types.ErrPocTooLate, "Confirmation PoC generation window closed")
+				"exchangeEndHeight", activeEvent.GetExchangeEnd(epochParams))
+			return nil, sdkerrors.Wrap(types.ErrPocTooLate, "Confirmation PoC batch submission window closed")
 		}
 
 		// Store batch using trigger_height as key

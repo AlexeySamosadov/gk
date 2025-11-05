@@ -145,9 +145,6 @@ func TestStartPocCommand_ConfirmationPoC_Success(t *testing.T) {
 		EventSequence:         0,
 		TriggerHeight:         140,
 		GenerationStartHeight: 142,
-		GenerationEndHeight:   162,
-		ValidationStartHeight: 163,
-		ValidationEndHeight:   173,
 		Phase:                 types.ConfirmationPoCPhase_CONFIRMATION_POC_GENERATION,
 		PocSeedBlockHash:      "test_hash",
 	}
@@ -259,9 +256,6 @@ func TestInitValidateCommand_ConfirmationPoC_Success(t *testing.T) {
 		EventSequence:         0,
 		TriggerHeight:         140,
 		GenerationStartHeight: 142,
-		GenerationEndHeight:   162,
-		ValidationStartHeight: 163,
-		ValidationEndHeight:   173,
 		Phase:                 types.ConfirmationPoCPhase_CONFIRMATION_POC_VALIDATION,
 		PocSeedBlockHash:      "test_hash",
 	}

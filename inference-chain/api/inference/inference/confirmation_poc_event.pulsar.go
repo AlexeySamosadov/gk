@@ -18,9 +18,6 @@ var (
 	fd_ConfirmationPoCEvent_event_sequence          protoreflect.FieldDescriptor
 	fd_ConfirmationPoCEvent_trigger_height          protoreflect.FieldDescriptor
 	fd_ConfirmationPoCEvent_generation_start_height protoreflect.FieldDescriptor
-	fd_ConfirmationPoCEvent_generation_end_height   protoreflect.FieldDescriptor
-	fd_ConfirmationPoCEvent_validation_start_height protoreflect.FieldDescriptor
-	fd_ConfirmationPoCEvent_validation_end_height   protoreflect.FieldDescriptor
 	fd_ConfirmationPoCEvent_phase                   protoreflect.FieldDescriptor
 	fd_ConfirmationPoCEvent_poc_seed_block_hash     protoreflect.FieldDescriptor
 )
@@ -32,9 +29,6 @@ func init() {
 	fd_ConfirmationPoCEvent_event_sequence = md_ConfirmationPoCEvent.Fields().ByName("event_sequence")
 	fd_ConfirmationPoCEvent_trigger_height = md_ConfirmationPoCEvent.Fields().ByName("trigger_height")
 	fd_ConfirmationPoCEvent_generation_start_height = md_ConfirmationPoCEvent.Fields().ByName("generation_start_height")
-	fd_ConfirmationPoCEvent_generation_end_height = md_ConfirmationPoCEvent.Fields().ByName("generation_end_height")
-	fd_ConfirmationPoCEvent_validation_start_height = md_ConfirmationPoCEvent.Fields().ByName("validation_start_height")
-	fd_ConfirmationPoCEvent_validation_end_height = md_ConfirmationPoCEvent.Fields().ByName("validation_end_height")
 	fd_ConfirmationPoCEvent_phase = md_ConfirmationPoCEvent.Fields().ByName("phase")
 	fd_ConfirmationPoCEvent_poc_seed_block_hash = md_ConfirmationPoCEvent.Fields().ByName("poc_seed_block_hash")
 }
@@ -128,24 +122,6 @@ func (x *fastReflection_ConfirmationPoCEvent) Range(f func(protoreflect.FieldDes
 			return
 		}
 	}
-	if x.GenerationEndHeight != int64(0) {
-		value := protoreflect.ValueOfInt64(x.GenerationEndHeight)
-		if !f(fd_ConfirmationPoCEvent_generation_end_height, value) {
-			return
-		}
-	}
-	if x.ValidationStartHeight != int64(0) {
-		value := protoreflect.ValueOfInt64(x.ValidationStartHeight)
-		if !f(fd_ConfirmationPoCEvent_validation_start_height, value) {
-			return
-		}
-	}
-	if x.ValidationEndHeight != int64(0) {
-		value := protoreflect.ValueOfInt64(x.ValidationEndHeight)
-		if !f(fd_ConfirmationPoCEvent_validation_end_height, value) {
-			return
-		}
-	}
 	if x.Phase != 0 {
 		value := protoreflect.ValueOfEnum((protoreflect.EnumNumber)(x.Phase))
 		if !f(fd_ConfirmationPoCEvent_phase, value) {
@@ -181,12 +157,6 @@ func (x *fastReflection_ConfirmationPoCEvent) Has(fd protoreflect.FieldDescripto
 		return x.TriggerHeight != int64(0)
 	case "inference.inference.ConfirmationPoCEvent.generation_start_height":
 		return x.GenerationStartHeight != int64(0)
-	case "inference.inference.ConfirmationPoCEvent.generation_end_height":
-		return x.GenerationEndHeight != int64(0)
-	case "inference.inference.ConfirmationPoCEvent.validation_start_height":
-		return x.ValidationStartHeight != int64(0)
-	case "inference.inference.ConfirmationPoCEvent.validation_end_height":
-		return x.ValidationEndHeight != int64(0)
 	case "inference.inference.ConfirmationPoCEvent.phase":
 		return x.Phase != 0
 	case "inference.inference.ConfirmationPoCEvent.poc_seed_block_hash":
@@ -215,12 +185,6 @@ func (x *fastReflection_ConfirmationPoCEvent) Clear(fd protoreflect.FieldDescrip
 		x.TriggerHeight = int64(0)
 	case "inference.inference.ConfirmationPoCEvent.generation_start_height":
 		x.GenerationStartHeight = int64(0)
-	case "inference.inference.ConfirmationPoCEvent.generation_end_height":
-		x.GenerationEndHeight = int64(0)
-	case "inference.inference.ConfirmationPoCEvent.validation_start_height":
-		x.ValidationStartHeight = int64(0)
-	case "inference.inference.ConfirmationPoCEvent.validation_end_height":
-		x.ValidationEndHeight = int64(0)
 	case "inference.inference.ConfirmationPoCEvent.phase":
 		x.Phase = 0
 	case "inference.inference.ConfirmationPoCEvent.poc_seed_block_hash":
@@ -252,15 +216,6 @@ func (x *fastReflection_ConfirmationPoCEvent) Get(descriptor protoreflect.FieldD
 		return protoreflect.ValueOfInt64(value)
 	case "inference.inference.ConfirmationPoCEvent.generation_start_height":
 		value := x.GenerationStartHeight
-		return protoreflect.ValueOfInt64(value)
-	case "inference.inference.ConfirmationPoCEvent.generation_end_height":
-		value := x.GenerationEndHeight
-		return protoreflect.ValueOfInt64(value)
-	case "inference.inference.ConfirmationPoCEvent.validation_start_height":
-		value := x.ValidationStartHeight
-		return protoreflect.ValueOfInt64(value)
-	case "inference.inference.ConfirmationPoCEvent.validation_end_height":
-		value := x.ValidationEndHeight
 		return protoreflect.ValueOfInt64(value)
 	case "inference.inference.ConfirmationPoCEvent.phase":
 		value := x.Phase
@@ -296,12 +251,6 @@ func (x *fastReflection_ConfirmationPoCEvent) Set(fd protoreflect.FieldDescripto
 		x.TriggerHeight = value.Int()
 	case "inference.inference.ConfirmationPoCEvent.generation_start_height":
 		x.GenerationStartHeight = value.Int()
-	case "inference.inference.ConfirmationPoCEvent.generation_end_height":
-		x.GenerationEndHeight = value.Int()
-	case "inference.inference.ConfirmationPoCEvent.validation_start_height":
-		x.ValidationStartHeight = value.Int()
-	case "inference.inference.ConfirmationPoCEvent.validation_end_height":
-		x.ValidationEndHeight = value.Int()
 	case "inference.inference.ConfirmationPoCEvent.phase":
 		x.Phase = (ConfirmationPoCPhase)(value.Enum())
 	case "inference.inference.ConfirmationPoCEvent.poc_seed_block_hash":
@@ -334,12 +283,6 @@ func (x *fastReflection_ConfirmationPoCEvent) Mutable(fd protoreflect.FieldDescr
 		panic(fmt.Errorf("field trigger_height of message inference.inference.ConfirmationPoCEvent is not mutable"))
 	case "inference.inference.ConfirmationPoCEvent.generation_start_height":
 		panic(fmt.Errorf("field generation_start_height of message inference.inference.ConfirmationPoCEvent is not mutable"))
-	case "inference.inference.ConfirmationPoCEvent.generation_end_height":
-		panic(fmt.Errorf("field generation_end_height of message inference.inference.ConfirmationPoCEvent is not mutable"))
-	case "inference.inference.ConfirmationPoCEvent.validation_start_height":
-		panic(fmt.Errorf("field validation_start_height of message inference.inference.ConfirmationPoCEvent is not mutable"))
-	case "inference.inference.ConfirmationPoCEvent.validation_end_height":
-		panic(fmt.Errorf("field validation_end_height of message inference.inference.ConfirmationPoCEvent is not mutable"))
 	case "inference.inference.ConfirmationPoCEvent.phase":
 		panic(fmt.Errorf("field phase of message inference.inference.ConfirmationPoCEvent is not mutable"))
 	case "inference.inference.ConfirmationPoCEvent.poc_seed_block_hash":
@@ -364,12 +307,6 @@ func (x *fastReflection_ConfirmationPoCEvent) NewField(fd protoreflect.FieldDesc
 	case "inference.inference.ConfirmationPoCEvent.trigger_height":
 		return protoreflect.ValueOfInt64(int64(0))
 	case "inference.inference.ConfirmationPoCEvent.generation_start_height":
-		return protoreflect.ValueOfInt64(int64(0))
-	case "inference.inference.ConfirmationPoCEvent.generation_end_height":
-		return protoreflect.ValueOfInt64(int64(0))
-	case "inference.inference.ConfirmationPoCEvent.validation_start_height":
-		return protoreflect.ValueOfInt64(int64(0))
-	case "inference.inference.ConfirmationPoCEvent.validation_end_height":
 		return protoreflect.ValueOfInt64(int64(0))
 	case "inference.inference.ConfirmationPoCEvent.phase":
 		return protoreflect.ValueOfEnum(0)
@@ -456,15 +393,6 @@ func (x *fastReflection_ConfirmationPoCEvent) ProtoMethods() *protoiface.Methods
 		if x.GenerationStartHeight != 0 {
 			n += 1 + runtime.Sov(uint64(x.GenerationStartHeight))
 		}
-		if x.GenerationEndHeight != 0 {
-			n += 1 + runtime.Sov(uint64(x.GenerationEndHeight))
-		}
-		if x.ValidationStartHeight != 0 {
-			n += 1 + runtime.Sov(uint64(x.ValidationStartHeight))
-		}
-		if x.ValidationEndHeight != 0 {
-			n += 1 + runtime.Sov(uint64(x.ValidationEndHeight))
-		}
 		if x.Phase != 0 {
 			n += 1 + runtime.Sov(uint64(x.Phase))
 		}
@@ -512,21 +440,6 @@ func (x *fastReflection_ConfirmationPoCEvent) ProtoMethods() *protoiface.Methods
 			i = runtime.EncodeVarint(dAtA, i, uint64(x.Phase))
 			i--
 			dAtA[i] = 0x40
-		}
-		if x.ValidationEndHeight != 0 {
-			i = runtime.EncodeVarint(dAtA, i, uint64(x.ValidationEndHeight))
-			i--
-			dAtA[i] = 0x38
-		}
-		if x.ValidationStartHeight != 0 {
-			i = runtime.EncodeVarint(dAtA, i, uint64(x.ValidationStartHeight))
-			i--
-			dAtA[i] = 0x30
-		}
-		if x.GenerationEndHeight != 0 {
-			i = runtime.EncodeVarint(dAtA, i, uint64(x.GenerationEndHeight))
-			i--
-			dAtA[i] = 0x28
 		}
 		if x.GenerationStartHeight != 0 {
 			i = runtime.EncodeVarint(dAtA, i, uint64(x.GenerationStartHeight))
@@ -669,63 +582,6 @@ func (x *fastReflection_ConfirmationPoCEvent) ProtoMethods() *protoiface.Methods
 					b := dAtA[iNdEx]
 					iNdEx++
 					x.GenerationStartHeight |= int64(b&0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-			case 5:
-				if wireType != 0 {
-					return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, fmt.Errorf("proto: wrong wireType = %d for field GenerationEndHeight", wireType)
-				}
-				x.GenerationEndHeight = 0
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, runtime.ErrIntOverflow
-					}
-					if iNdEx >= l {
-						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					x.GenerationEndHeight |= int64(b&0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-			case 6:
-				if wireType != 0 {
-					return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, fmt.Errorf("proto: wrong wireType = %d for field ValidationStartHeight", wireType)
-				}
-				x.ValidationStartHeight = 0
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, runtime.ErrIntOverflow
-					}
-					if iNdEx >= l {
-						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					x.ValidationStartHeight |= int64(b&0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-			case 7:
-				if wireType != 0 {
-					return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, fmt.Errorf("proto: wrong wireType = %d for field ValidationEndHeight", wireType)
-				}
-				x.ValidationEndHeight = 0
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, runtime.ErrIntOverflow
-					}
-					if iNdEx >= l {
-						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					x.ValidationEndHeight |= int64(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -896,10 +752,7 @@ type ConfirmationPoCEvent struct {
 	EpochIndex            uint64               `protobuf:"varint,1,opt,name=epoch_index,json=epochIndex,proto3" json:"epoch_index,omitempty"`                                    // Which epoch this event belongs to
 	EventSequence         uint64               `protobuf:"varint,2,opt,name=event_sequence,json=eventSequence,proto3" json:"event_sequence,omitempty"`                           // Sequence number for multiple events per epoch (0, 1, 2...)
 	TriggerHeight         int64                `protobuf:"varint,3,opt,name=trigger_height,json=triggerHeight,proto3" json:"trigger_height,omitempty"`                           // Block height where trigger decision was made
-	GenerationStartHeight int64                `protobuf:"varint,4,opt,name=generation_start_height,json=generationStartHeight,proto3" json:"generation_start_height,omitempty"` // trigger_height + grace_period
-	GenerationEndHeight   int64                `protobuf:"varint,5,opt,name=generation_end_height,json=generationEndHeight,proto3" json:"generation_end_height,omitempty"`       // generation_start + generation_duration
-	ValidationStartHeight int64                `protobuf:"varint,6,opt,name=validation_start_height,json=validationStartHeight,proto3" json:"validation_start_height,omitempty"` // generation_end + 1
-	ValidationEndHeight   int64                `protobuf:"varint,7,opt,name=validation_end_height,json=validationEndHeight,proto3" json:"validation_end_height,omitempty"`       // validation_start + validation_duration
+	GenerationStartHeight int64                `protobuf:"varint,4,opt,name=generation_start_height,json=generationStartHeight,proto3" json:"generation_start_height,omitempty"` // Anchor: all other heights calculated from this + EpochParams
 	Phase                 ConfirmationPoCPhase `protobuf:"varint,8,opt,name=phase,proto3,enum=inference.inference.ConfirmationPoCPhase" json:"phase,omitempty"`                  // Current phase of the event
 	// Block hash from (generation_start_height - 1) for PoC nonce generation.
 	// This hash is only set when transitioning to GENERATION phase to prevent
@@ -955,27 +808,6 @@ func (x *ConfirmationPoCEvent) GetGenerationStartHeight() int64 {
 	return 0
 }
 
-func (x *ConfirmationPoCEvent) GetGenerationEndHeight() int64 {
-	if x != nil {
-		return x.GenerationEndHeight
-	}
-	return 0
-}
-
-func (x *ConfirmationPoCEvent) GetValidationStartHeight() int64 {
-	if x != nil {
-		return x.ValidationStartHeight
-	}
-	return 0
-}
-
-func (x *ConfirmationPoCEvent) GetValidationEndHeight() int64 {
-	if x != nil {
-		return x.ValidationEndHeight
-	}
-	return 0
-}
-
 func (x *ConfirmationPoCEvent) GetPhase() ConfirmationPoCPhase {
 	if x != nil {
 		return x.Phase
@@ -997,7 +829,7 @@ var file_inference_inference_confirmation_poc_event_proto_rawDesc = []byte{
 	0x72, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x72, 0x6d, 0x61, 0x74, 0x69,
 	0x6f, 0x6e, 0x5f, 0x70, 0x6f, 0x63, 0x5f, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x70, 0x72, 0x6f,
 	0x74, 0x6f, 0x12, 0x13, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x69, 0x6e,
-	0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x22, 0xcd, 0x03, 0x0a, 0x14, 0x43, 0x6f, 0x6e, 0x66,
+	0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x22, 0xad, 0x02, 0x0a, 0x14, 0x43, 0x6f, 0x6e, 0x66,
 	0x69, 0x72, 0x6d, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x6f, 0x43, 0x45, 0x76, 0x65, 0x6e, 0x74,
 	0x12, 0x1f, 0x0a, 0x0b, 0x65, 0x70, 0x6f, 0x63, 0x68, 0x5f, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x18,
 	0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0a, 0x65, 0x70, 0x6f, 0x63, 0x68, 0x49, 0x6e, 0x64, 0x65,
@@ -1009,17 +841,7 @@ var file_inference_inference_confirmation_poc_event_proto_rawDesc = []byte{
 	0x36, 0x0a, 0x17, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x73, 0x74,
 	0x61, 0x72, 0x74, 0x5f, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x03,
 	0x52, 0x15, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x72,
-	0x74, 0x48, 0x65, 0x69, 0x67, 0x68, 0x74, 0x12, 0x32, 0x0a, 0x15, 0x67, 0x65, 0x6e, 0x65, 0x72,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x65, 0x6e, 0x64, 0x5f, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74,
-	0x18, 0x05, 0x20, 0x01, 0x28, 0x03, 0x52, 0x13, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69,
-	0x6f, 0x6e, 0x45, 0x6e, 0x64, 0x48, 0x65, 0x69, 0x67, 0x68, 0x74, 0x12, 0x36, 0x0a, 0x17, 0x76,
-	0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x5f, 0x73, 0x74, 0x61, 0x72, 0x74, 0x5f,
-	0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x18, 0x06, 0x20, 0x01, 0x28, 0x03, 0x52, 0x15, 0x76, 0x61,
-	0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x48, 0x65, 0x69,
-	0x67, 0x68, 0x74, 0x12, 0x32, 0x0a, 0x15, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f,
-	0x6e, 0x5f, 0x65, 0x6e, 0x64, 0x5f, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x18, 0x07, 0x20, 0x01,
-	0x28, 0x03, 0x52, 0x13, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x45, 0x6e,
-	0x64, 0x48, 0x65, 0x69, 0x67, 0x68, 0x74, 0x12, 0x3f, 0x0a, 0x05, 0x70, 0x68, 0x61, 0x73, 0x65,
+	0x74, 0x48, 0x65, 0x69, 0x67, 0x68, 0x74, 0x12, 0x3f, 0x0a, 0x05, 0x70, 0x68, 0x61, 0x73, 0x65,
 	0x18, 0x08, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x29, 0x2e, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e,
 	0x63, 0x65, 0x2e, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x43, 0x6f, 0x6e,
 	0x66, 0x69, 0x72, 0x6d, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x50, 0x6f, 0x43, 0x50, 0x68, 0x61, 0x73,

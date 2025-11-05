@@ -392,9 +392,10 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 	// Confirmation PoC transitions (during inference phase)
 	if epochState.CurrentPhase == types.InferencePhase && epochState.ActiveConfirmationPoCEvent != nil {
 		event := epochState.ActiveConfirmationPoCEvent
+		epochParams := &epochState.LatestEpoch.EpochParams
 
 		// Start generation
-		if blockHeight == event.GenerationStartHeight {
+		if event.ShouldStartGeneration(blockHeight) {
 			logging.Info("Confirmation PoC generation starting", types.PoC,
 				"trigger_height", event.TriggerHeight,
 				"block_hash", event.PocSeedBlockHash)
@@ -405,24 +406,31 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 			}
 		}
 
-		// Start validation
-		if blockHeight == event.ValidationStartHeight {
-			logging.Info("Confirmation PoC validation starting", types.PoC,
-				"trigger_height", event.TriggerHeight)
+		// End of exchange period - initiate validation transition
+		if event.ShouldInitValidation(blockHeight, epochParams) {
+			logging.Info("Confirmation PoC: initiating validation transition", types.PoC,
+				"trigger_height", event.TriggerHeight,
+				"exchange_end", event.GetExchangeEnd(epochParams),
+				"validation_starts_at", event.GetValidationStart(epochParams))
 
 			command := broker.NewInitValidateCommand()
 			if err := d.nodeBroker.QueueMessage(command); err != nil {
 				logging.Error("Failed to send confirmation PoC validate command", types.PoC, "error", err)
 			}
+		}
 
-			// Start validation sampling
+		// Start validation (now has proper gap from InitValidateCommand)
+		if event.ShouldStartValidation(blockHeight, epochParams) {
+			logging.Info("Confirmation PoC validation starting", types.PoC,
+				"trigger_height", event.TriggerHeight)
+
 			go func() {
 				d.nodePocOrchestrator.ValidateReceivedBatches(event.TriggerHeight)
 			}()
 		}
 
 		// End of event - return to inference
-		if blockHeight == event.ValidationEndHeight+1 {
+		if event.ShouldReturnToInference(blockHeight, epochParams) {
 			logging.Info("Confirmation PoC completed", types.PoC,
 				"trigger_height", event.TriggerHeight)
 
