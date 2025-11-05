@@ -262,6 +262,16 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 		transitionCount++
 		transitions = append(transitions, "VALIDATION->COMPLETED")
 
+		// Calculate and update confirmation weights
+		err := am.updateConfirmationWeights(ctx, &event)
+		if err != nil {
+			am.LogError("Confirmation PoC: Failed to update confirmation weights", types.PoC,
+				"epochIndex", event.EpochIndex,
+				"eventSequence", event.EventSequence,
+				"error", err)
+			// Continue with transition even if update fails
+		}
+
 		// Clear active event
 		err = am.keeper.ClearActiveConfirmationPoCEvent(ctx)
 		if err != nil {
@@ -303,4 +313,113 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 	}
 
 	return nil
+}
+
+// updateConfirmationWeights calculates confirmation weights from PoC batches/validations
+// and updates EpochGroupData.ValidationWeights with minimum values
+func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.ConfirmationPoCEvent) error {
+	// Get current epoch's EpochGroupData
+	epochGroupData, found := am.keeper.GetEpochGroupData(ctx, event.EpochIndex, "")
+	if !found {
+		return fmt.Errorf("epoch group data not found for epoch %d", event.EpochIndex)
+	}
+
+	// Get current validator weights for WeightCalculator
+	currentValidatorWeights, err := am.getCurrentValidatorWeights(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current validator weights: %w", err)
+	}
+
+	// Get PoC batches and validations using trigger_height as key
+	allBatches, err := am.keeper.GetPoCBatchesByStage(ctx, event.TriggerHeight)
+	if err != nil {
+		return fmt.Errorf("failed to get PoC batches for confirmation: %w", err)
+	}
+
+	validations, err := am.keeper.GetPoCValidationByStage(ctx, event.TriggerHeight)
+	if err != nil {
+		return fmt.Errorf("failed to get PoC validations for confirmation: %w", err)
+	}
+
+	// Collect participants and seeds for WeightCalculator
+	participants := make(map[string]types.Participant)
+	seeds := make(map[string]types.RandomSeed)
+
+	for participantAddress := range allBatches {
+		participant, ok := am.keeper.GetParticipant(ctx, participantAddress)
+		if !ok {
+			am.LogWarn("updateConfirmationWeights: Participant not found", types.PoC,
+				"address", participantAddress)
+			continue
+		}
+		participants[participantAddress] = participant
+
+		seed, found := am.keeper.GetRandomSeed(ctx, event.EpochIndex, participantAddress)
+		if found {
+			seeds[participantAddress] = seed
+		}
+	}
+
+	// Create WeightCalculator (reuse regular PoC logic)
+	calculator := NewWeightCalculator(
+		currentValidatorWeights,
+		allBatches,
+		validations,
+		participants,
+		seeds,
+		event.TriggerHeight,
+		am,
+	)
+
+	// Calculate confirmation weights
+	confirmationParticipants := calculator.Calculate()
+
+	// Convert to map for easy lookup
+	confirmationWeights := make(map[string]int64)
+	for _, cp := range confirmationParticipants {
+		confirmationWeights[cp.Index] = cp.Weight
+	}
+
+	// Update ValidationWeights: confirmation_weight = min(current, calculated)
+	updated := false
+	for i, vw := range epochGroupData.ValidationWeights {
+		if calculatedWeight, found := confirmationWeights[vw.MemberAddress]; found {
+			// Take minimum across all confirmation events (simple min, no special case for zero)
+			if calculatedWeight < vw.ConfirmationWeight {
+				previousWeight := vw.ConfirmationWeight
+				epochGroupData.ValidationWeights[i].ConfirmationWeight = calculatedWeight
+				updated = true
+				am.LogInfo("updateConfirmationWeights: Updated confirmation weight", types.PoC,
+					"participant", vw.MemberAddress,
+					"previousConfirmationWeight", previousWeight,
+					"newConfirmationWeight", calculatedWeight)
+			} else {
+				am.LogInfo("updateConfirmationWeights: Keeping current confirmation weight (minimum)", types.PoC,
+					"participant", vw.MemberAddress,
+					"currentConfirmationWeight", vw.ConfirmationWeight,
+					"calculatedWeight", calculatedWeight)
+			}
+		}
+	}
+
+	if updated {
+		am.keeper.SetEpochGroupData(ctx, epochGroupData)
+		am.LogInfo("updateConfirmationWeights: Saved updated EpochGroupData", types.PoC,
+			"epochIndex", event.EpochIndex)
+	}
+
+	// Check for slashing violations
+	am.checkConfirmationSlashing(ctx, &epochGroupData, confirmationWeights)
+
+	return nil
+}
+
+// checkConfirmationSlashing checks if participants should be slashed based on confirmation PoC results
+// Stub implementation - slashing logic not yet implemented
+func (am AppModule) checkConfirmationSlashing(ctx context.Context, epochGroupData *types.EpochGroupData, confirmationWeights map[string]int64) {
+	// TODO: Implement slashing logic
+	// Check if confirmationWeight <= alpha * initialWeight
+	// If true, slash and jail participant
+	am.LogInfo("checkConfirmationSlashing: Stub called (not yet implemented)", types.PoC,
+		"epochIndex", epochGroupData.EpochIndex)
 }

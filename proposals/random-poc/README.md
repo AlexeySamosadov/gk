@@ -41,15 +41,63 @@ This proves nodes maintain the computational capacity they claimed during regula
 
 **Question**: Using current epoch's POC_SLOT means we verify preserved weights that were NOT re-computed during this epoch's PoC phase. Alternative approach: use previous epoch's POC_SLOT to verify only weights that were just computed during epoch N. Current implementation verifies all weights contributing to rewards regardless of when computed.
 
-### Enforcement
+### Confirmation Weight Lifecycle
 
-Two mechanisms use confirmation weight:
+The confirmation weight follows a clear lifecycle from initialization through settlement:
 
-**Slashing**: If `confirmationWeight <= alpha * weight`, participant is slashed and jailed. Alpha (e.g. 0.70) tolerates minor compute degradation or temporary issues.
+**1. Initialization (Epoch Formation)**
+- When EpochMember created: `confirmation_weight = sum(POC_SLOT=false weights)`
+- This baseline represents the weight subject to verification
+- All participants start with their full non-preserved weight as confirmation_weight
 
-**Reward cap**: Settlement uses `min(weight, confirmationWeight)`. Example: 100 PoC weight but 60 confirmation weight = 60 reward weight.
+**2. During Epoch (Confirmation PoC Events)**
+- If confirmation PoC triggered: Calculate actual weight from batches/validations
+- Update: `confirmation_weight = min(current, calculated)`
+- Multiple events: Take minimum across all confirmation events
+- This captures the lowest verified capacity during the epoch
+
+**3. Slashing Check (After Each Event)**
+- Compare: `final_confirmation_weight vs alpha * initial_confirmation_weight`
+- If below threshold (e.g., `confirmationWeight <= 0.70 * initialWeight`): Slash and jail participant
+- Alpha tolerates minor compute degradation or temporary issues
+
+**4. Settlement (Epoch End)**
+- Recompute: `effectiveWeight = preservedWeight + confirmation_weight`
+- Where: `preservedWeight = sum(POC_SLOT=true weights)`
+- Apply power capping to effectiveWeight
+- Distribute rewards proportionally to capped weights
+
+**Key Property**: When no confirmation PoC occurs (or exact match):
+```
+capped(preservedWeight + confirmation_weight) == capped(total_weight)
+```
 
 This ensures nodes cannot earn rewards based on compute capacity they no longer possess or maintain.
+
+### Confirmation Weight and Power Capping
+
+Power capping (30% network limit) applies at TWO stages:
+
+1. **During PoC Phase** (`ComputeNewWeights`):
+   - Calculates weights from PoC batches/validations
+   - Stores per-MLNode weights **UNCAPPED** in `ValidationWeights.MlNodes[].PocWeight`
+   - Applies power capping to total participant weight
+   - Stores **CAPPED** total in `ValidationWeights.Weight`
+
+2. **During Settlement** (`CalculateParticipantBitcoinRewards`):
+   - Recomputes from **UNCAPPED** MLNode weights: `effectiveWeight = preservedWeight + confirmation_weight`
+   - Re-applies power capping to `effectiveWeight`
+   - Distributes rewards based on capped weights
+
+**Key Property**: When no confirmation PoC occurs (or exact match):
+```
+capped(preservedWeight + confirmation_weight) = ValidationWeights.Weight
+```
+
+Equality holds **after capping**, not before. This works because:
+- MLNode weights stored uncapped allow recomposition
+- Re-applying same capping algorithm produces same result
+- Confirmed capacity properly integrated into reward calculation
 
 ## Implementation
 

@@ -174,6 +174,25 @@ func GetPreservedWeight(participant string, epochGroupData *types.EpochGroupData
 	return 0
 }
 
+// RecomputeEffectiveWeightFromMLNodes recalculates participant weight from uncapped MLNode weights
+// This allows integration of confirmation_weight for nodes subject to verification
+func RecomputeEffectiveWeightFromMLNodes(vw *types.ValidationWeight) int64 {
+	preservedWeight := int64(0) // Sum POC_SLOT=true nodes only
+
+	for _, mlNode := range vw.MlNodes {
+		if mlNode == nil || len(mlNode.TimeslotAllocation) < 2 {
+			continue
+		}
+
+		if mlNode.TimeslotAllocation[1] { // POC_SLOT=true
+			preservedWeight += mlNode.PocWeight
+		}
+	}
+
+	// ConfirmationWeight always initialized - holds verified weight for POC_SLOT=false nodes
+	return preservedWeight + vw.ConfirmationWeight
+}
+
 // GetParticipantPoCWeight retrieves and calculates final PoC weight for reward distribution
 // Note: This function is used for display/query purposes and returns original base weight.
 // For settlement, CalculateParticipantBitcoinRewards applies confirmation weight capping
@@ -405,129 +424,63 @@ func CalculateParticipantBitcoinRewards(
 	// 2. Calculate effective weights with confirmation capping
 	participantWeights := make(map[string]uint64)
 
-	// First, calculate effectiveWeight = preservedWeight + confirmationWeight for each participant
+	// Calculate effectiveWeight for each participant using helper function
 	effectiveWeights := make([]*types.ActiveParticipant, 0, len(participants))
 	for _, participant := range participants {
 		if participant.Status == types.ParticipantStatus_INVALID {
-			logger.Info("Invalid participant found, skipping", "participant", participant.Address)
+			logger.Info("Bitcoin Rewards: Invalid participant, skipping", "participant", participant.Address)
 			participantWeights[participant.Address] = 0
 			continue
 		}
 
-		// Get base weight and confirmation weight
-		var baseWeight int64 = 0
-		var confirmationWeight int64 = 0
-		var hasMlNodesWithTimeslots bool = false
-
-		for _, vw := range epochGroupData.ValidationWeights {
-			if vw.MemberAddress == participant.Address {
-				baseWeight = vw.Weight
-				confirmationWeight = vw.ConfirmationWeight
-
-				// Check if participant has MLNodes with timeslot allocations configured
-				for _, mlNode := range vw.MlNodes {
-					if mlNode != nil && len(mlNode.TimeslotAllocation) > 1 {
-						hasMlNodesWithTimeslots = true
-						break
-					}
-				}
+		// Find ValidationWeight for this participant
+		var vw *types.ValidationWeight
+		for _, validationWeight := range epochGroupData.ValidationWeights {
+			if validationWeight.MemberAddress == participant.Address {
+				vw = validationWeight
 				break
 			}
 		}
 
-		if baseWeight <= 0 {
+		if vw == nil || vw.Weight <= 0 {
+			logger.Info("Bitcoin Rewards: No valid weight found, skipping", "participant", participant.Address)
 			participantWeights[participant.Address] = 0
 			continue
 		}
 
-		// Calculate effective weight with confirmation capping
-		var effectiveWeight int64
-		var preservedWeight int64 = 0
-
-		if hasMlNodesWithTimeslots {
-			// New system: calculate preserved weight (POC_SLOT=true nodes)
-			preservedWeight = GetPreservedWeight(participant.Address, epochGroupData)
-
-			// Calculate effective weight = preserved + confirmed
-			effectiveWeight = preservedWeight + confirmationWeight
-			if effectiveWeight < 0 {
-				effectiveWeight = 0
-			}
-
-			logger.Info("Bitcoin Rewards: Calculated effective weight with confirmation capping",
-				"participant", participant.Address,
-				"baseWeight", baseWeight,
-				"preservedWeight", preservedWeight,
-				"confirmationWeight", confirmationWeight,
-				"effectiveWeight", effectiveWeight)
-		} else {
-			// Backward compatibility: no MLNodes with timeslot allocations
-			// Use original base weight (pre-confirmation PoC system)
-			effectiveWeight = baseWeight
-
-			logger.Info("Bitcoin Rewards: Using base weight (no timeslot allocations)",
-				"participant", participant.Address,
-				"baseWeight", baseWeight,
-				"effectiveWeight", effectiveWeight)
+		// Recompute effective weight from MLNodes (includes confirmation capping)
+		effectiveWeight := RecomputeEffectiveWeightFromMLNodes(vw)
+		if effectiveWeight < 0 {
+			effectiveWeight = 0
 		}
 
-		// Create ActiveParticipant for power capping algorithm
+		logger.Info("Bitcoin Rewards: Calculated effective weight",
+			"participant", participant.Address,
+			"baseWeight", vw.Weight,
+			"confirmationWeight", vw.ConfirmationWeight,
+			"effectiveWeight", effectiveWeight)
+
 		effectiveWeights = append(effectiveWeights, &types.ActiveParticipant{
 			Index:  participant.Address,
 			Weight: effectiveWeight,
 		})
 	}
 
-	// 3. Apply power capping to effective weights (30% cap)
-	// Only apply if we have participants with timeslot allocations (confirmation PoC system)
-	// Otherwise, weights were already capped in ComputeNewWeights
-	var needsPowerCapping bool = false
-	for _, vw := range epochGroupData.ValidationWeights {
-		for _, mlNode := range vw.MlNodes {
-			if mlNode != nil && len(mlNode.TimeslotAllocation) > 1 {
-				needsPowerCapping = true
-				break
-			}
-		}
-		if needsPowerCapping {
-			break
+	// 3. Apply power capping to effective weights
+	cappedParticipants, wasCapped := ApplyPowerCappingForWeights(effectiveWeights)
+
+	// Map capped weights back to participants
+	for _, cappedParticipant := range cappedParticipants {
+		if cappedParticipant.Weight < 0 {
+			participantWeights[cappedParticipant.Index] = 0
+		} else {
+			participantWeights[cappedParticipant.Index] = uint64(cappedParticipant.Weight)
 		}
 	}
 
-	if needsPowerCapping {
-		cappedParticipants, wasCapped := ApplyPowerCappingForWeights(effectiveWeights)
-
-		// Map capped weights back to participants
-		for _, cappedParticipant := range cappedParticipants {
-			if cappedParticipant.Weight < 0 {
-				participantWeights[cappedParticipant.Index] = 0
-			} else {
-				participantWeights[cappedParticipant.Index] = uint64(cappedParticipant.Weight)
-			}
-		}
-
-		// Calculate total for logging
-		cappedTotal := uint64(0)
-		for _, weight := range participantWeights {
-			cappedTotal += weight
-		}
-
-		logger.Info("Bitcoin Rewards: Applied confirmation weight capping",
-			"cappedTotalWeight", cappedTotal,
-			"wasCapped", wasCapped)
-	} else {
-		// Backward compatibility: use effective weights directly (already capped in ComputeNewWeights)
-		for _, ew := range effectiveWeights {
-			if ew.Weight < 0 {
-				participantWeights[ew.Index] = 0
-			} else {
-				participantWeights[ew.Index] = uint64(ew.Weight)
-			}
-		}
-
-		logger.Info("Bitcoin Rewards: Using pre-capped weights (backward compatibility)",
-			"participantCount", len(effectiveWeights))
-	}
+	logger.Info("Bitcoin Rewards: Applied power capping to effective weights",
+		"participantCount", len(effectiveWeights),
+		"wasCapped", wasCapped)
 
 	// Calculate total weight
 	totalPoCWeight := uint64(0)
