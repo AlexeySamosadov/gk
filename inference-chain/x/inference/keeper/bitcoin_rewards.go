@@ -154,7 +154,30 @@ func CalculateFixedEpochReward(epochsSinceGenesis uint64, initialReward uint64, 
 	return uint64(result)
 }
 
+// GetPreservedWeight calculates the weight of nodes with POC_SLOT=true
+// These nodes continue serving inference during confirmation PoC and are not subject to verification
+func GetPreservedWeight(participant string, epochGroupData *types.EpochGroupData) int64 {
+	for _, validationWeight := range epochGroupData.ValidationWeights {
+		if validationWeight.MemberAddress == participant {
+			var preservedWeight int64 = 0
+
+			// Sum weights from nodes with POC_SLOT=true (index 1)
+			for _, mlNode := range validationWeight.MlNodes {
+				if mlNode != nil && len(mlNode.TimeslotAllocation) > 1 && mlNode.TimeslotAllocation[1] {
+					preservedWeight += mlNode.PocWeight
+				}
+			}
+
+			return preservedWeight
+		}
+	}
+	return 0
+}
+
 // GetParticipantPoCWeight retrieves and calculates final PoC weight for reward distribution
+// Note: This function is used for display/query purposes and returns original base weight.
+// For settlement, CalculateParticipantBitcoinRewards applies confirmation weight capping
+// directly with formula: effectiveWeight = preservedWeight + confirmationWeight
 // Phase 1: Extract base PoC weight from EpochGroup.ValidationWeights and apply bonus multipliers
 // Phase 2: Bonus functions will provide actual utilization and coverage calculations
 func GetParticipantPoCWeight(participant string, epochGroupData *types.EpochGroupData) uint64 {
@@ -175,15 +198,6 @@ func GetParticipantPoCWeight(participant string, epochGroupData *types.EpochGrou
 				return 0
 			}
 			baseWeight = uint64(validationWeight.Weight)
-			
-			// TODO: Implement reward capping using confirmation weights
-			// For participants with confirmation PoC data, use min(weight, confirmationWeight)
-			// to cap rewards at demonstrated compute capacity rather than claimed capacity.
-			// Note: Must handle preserved weight + confirmation weight logic correctly:
-			// - POC_SLOT=true nodes: use regular weight (continue inference, not subject to confirmation)
-			// - POC_SLOT=false nodes: use min(weight, confirmationWeight) if confirmationWeight > 0
-			// This ensures nodes cannot earn rewards based on compute capacity they no longer maintain.
-			
 			break
 		}
 	}
@@ -219,6 +233,149 @@ func GetParticipantPoCWeight(participant string, epochGroupData *types.EpochGrou
 	return uint64(finalWeight)
 }
 
+// ApplyPowerCappingForWeights applies 30% power capping to a list of participants
+// This is a shared utility that can be used both during PoC weight calculation and settlement
+func ApplyPowerCappingForWeights(participants []*types.ActiveParticipant) ([]*types.ActiveParticipant, bool) {
+	if len(participants) == 0 {
+		return participants, false
+	}
+
+	if len(participants) == 1 {
+		return participants, false
+	}
+
+	// Calculate total weight
+	totalWeight := int64(0)
+	for _, p := range participants {
+		totalWeight += p.Weight
+	}
+
+	// Use standard 30% cap
+	maxPercentageDecimal := types.DecimalFromFloat(0.30)
+
+	// Apply dynamic limits for small networks
+	participantCount := len(participants)
+	if participantCount < 4 {
+		adjustedLimit := getSmallNetworkLimit(participantCount)
+		if adjustedLimit.ToDecimal().GreaterThan(maxPercentageDecimal.ToDecimal()) {
+			maxPercentageDecimal = adjustedLimit
+		}
+	}
+
+	// Call the core capping algorithm
+	cappedParticipants, _, wasCapped := calculateOptimalCap(participants, totalWeight, maxPercentageDecimal)
+
+	return cappedParticipants, wasCapped
+}
+
+// calculateOptimalCap implements the power capping algorithm
+// Returns capped participants, new total power, and whether capping was applied
+func calculateOptimalCap(participants []*types.ActiveParticipant, totalPower int64, maxPercentage *types.Decimal) ([]*types.ActiveParticipant, int64, bool) {
+	participantCount := len(participants)
+	maxPercentageDecimal := maxPercentage.ToDecimal()
+
+	// Create sorted participant power info for analysis
+	type ParticipantPowerInfo struct {
+		Participant *types.ActiveParticipant
+		Power       int64
+		Index       int
+	}
+
+	participantPowers := make([]ParticipantPowerInfo, participantCount)
+	for i, participant := range participants {
+		participantPowers[i] = ParticipantPowerInfo{
+			Participant: participant,
+			Power:       participant.Weight,
+			Index:       i,
+		}
+	}
+
+	// Sort by power (smallest to largest) - simple bubble sort for small arrays
+	for i := 0; i < len(participantPowers)-1; i++ {
+		for j := i + 1; j < len(participantPowers); j++ {
+			if participantPowers[i].Power > participantPowers[j].Power {
+				participantPowers[i], participantPowers[j] = participantPowers[j], participantPowers[i]
+			}
+		}
+	}
+
+	// Iterate through sorted powers to find threshold
+	cap := int64(-1)
+	sumPrev := int64(0)
+	for k := 0; k < participantCount; k++ {
+		currentPower := participantPowers[k].Power
+		weightedTotal := sumPrev + currentPower*int64(participantCount-k)
+
+		weightedTotalDecimal := decimal.NewFromInt(weightedTotal)
+		threshold := maxPercentageDecimal.Mul(weightedTotalDecimal)
+		currentPowerDecimal := decimal.NewFromInt(currentPower)
+
+		if currentPowerDecimal.GreaterThan(threshold) {
+			sumPrevDecimal := decimal.NewFromInt(sumPrev)
+			numerator := maxPercentageDecimal.Mul(sumPrevDecimal)
+
+			remainingParticipants := decimal.NewFromInt(int64(participantCount - k))
+			maxPercentageTimesRemaining := maxPercentageDecimal.Mul(remainingParticipants)
+			denominator := decimal.NewFromInt(1).Sub(maxPercentageTimesRemaining)
+
+			if denominator.LessThanOrEqual(decimal.Zero) {
+				cap = currentPower
+				break
+			}
+
+			capDecimal := numerator.Div(denominator)
+			cap = capDecimal.IntPart()
+			break
+		}
+
+		sumPrev += currentPower
+	}
+
+	// If no threshold found, no capping needed
+	if cap == -1 {
+		return participants, totalPower, false
+	}
+
+	// Apply cap to all participants in original order
+	cappedParticipants := make([]*types.ActiveParticipant, len(participants))
+	finalTotalPower := int64(0)
+
+	for i, participant := range participants {
+		cappedParticipant := &types.ActiveParticipant{
+			Index:        participant.Index,
+			ValidatorKey: participant.ValidatorKey,
+			Weight:       participant.Weight,
+			InferenceUrl: participant.InferenceUrl,
+			Seed:         participant.Seed,
+			Models:       participant.Models,
+			MlNodes:      participant.MlNodes,
+		}
+
+		if cappedParticipant.Weight > cap {
+			cappedParticipant.Weight = cap
+		}
+
+		cappedParticipants[i] = cappedParticipant
+		finalTotalPower += cappedParticipant.Weight
+	}
+
+	return cappedParticipants, finalTotalPower, true
+}
+
+// getSmallNetworkLimit returns higher limits for small networks
+func getSmallNetworkLimit(participantCount int) *types.Decimal {
+	switch participantCount {
+	case 1:
+		return types.DecimalFromFloat(1.0) // 100%
+	case 2:
+		return types.DecimalFromFloat(0.50) // 50%
+	case 3:
+		return types.DecimalFromFloat(0.40) // 40%
+	default:
+		return types.DecimalFromFloat(0.30) // 30%
+	}
+}
+
 // CalculateParticipantBitcoinRewards implements the main Bitcoin reward distribution logic
 // Preserves WorkCoins distribution while implementing fixed RewardCoins based on PoC weight
 func CalculateParticipantBitcoinRewards(
@@ -245,28 +402,145 @@ func CalculateParticipantBitcoinRewards(
 	// 1. Calculate fixed epoch reward using exponential decay
 	fixedEpochReward := CalculateFixedEpochReward(epochsSinceGenesis, bitcoinParams.InitialEpochReward, bitcoinParams.DecayRate)
 
-	// 2. Calculate total PoC weight across all participants
-	var totalPoCWeight uint64 = 0
+	// 2. Calculate effective weights with confirmation capping
 	participantWeights := make(map[string]uint64)
 
+	// First, calculate effectiveWeight = preservedWeight + confirmationWeight for each participant
+	effectiveWeights := make([]*types.ActiveParticipant, 0, len(participants))
 	for _, participant := range participants {
-		// Skip invalid participants from PoC weight calculations
 		if participant.Status == types.ParticipantStatus_INVALID {
-			logger.Info("Invalid participant found in PoC weight calculations, skipping", "participant", participant.Address)
+			logger.Info("Invalid participant found, skipping", "participant", participant.Address)
 			participantWeights[participant.Address] = 0
 			continue
 		}
 
-		pocWeight := GetParticipantPoCWeight(participant.Address, epochGroupData)
-		participantWeights[participant.Address] = pocWeight
-		totalPoCWeight += pocWeight
+		// Get base weight and confirmation weight
+		var baseWeight int64 = 0
+		var confirmationWeight int64 = 0
+		var hasMlNodesWithTimeslots bool = false
+
+		for _, vw := range epochGroupData.ValidationWeights {
+			if vw.MemberAddress == participant.Address {
+				baseWeight = vw.Weight
+				confirmationWeight = vw.ConfirmationWeight
+
+				// Check if participant has MLNodes with timeslot allocations configured
+				for _, mlNode := range vw.MlNodes {
+					if mlNode != nil && len(mlNode.TimeslotAllocation) > 1 {
+						hasMlNodesWithTimeslots = true
+						break
+					}
+				}
+				break
+			}
+		}
+
+		if baseWeight <= 0 {
+			participantWeights[participant.Address] = 0
+			continue
+		}
+
+		// Calculate effective weight with confirmation capping
+		var effectiveWeight int64
+		var preservedWeight int64 = 0
+
+		if hasMlNodesWithTimeslots {
+			// New system: calculate preserved weight (POC_SLOT=true nodes)
+			preservedWeight = GetPreservedWeight(participant.Address, epochGroupData)
+
+			// Calculate effective weight = preserved + confirmed
+			effectiveWeight = preservedWeight + confirmationWeight
+			if effectiveWeight < 0 {
+				effectiveWeight = 0
+			}
+
+			logger.Info("Bitcoin Rewards: Calculated effective weight with confirmation capping",
+				"participant", participant.Address,
+				"baseWeight", baseWeight,
+				"preservedWeight", preservedWeight,
+				"confirmationWeight", confirmationWeight,
+				"effectiveWeight", effectiveWeight)
+		} else {
+			// Backward compatibility: no MLNodes with timeslot allocations
+			// Use original base weight (pre-confirmation PoC system)
+			effectiveWeight = baseWeight
+
+			logger.Info("Bitcoin Rewards: Using base weight (no timeslot allocations)",
+				"participant", participant.Address,
+				"baseWeight", baseWeight,
+				"effectiveWeight", effectiveWeight)
+		}
+
+		// Create ActiveParticipant for power capping algorithm
+		effectiveWeights = append(effectiveWeights, &types.ActiveParticipant{
+			Index:  participant.Address,
+			Weight: effectiveWeight,
+		})
 	}
 
+	// 3. Apply power capping to effective weights (30% cap)
+	// Only apply if we have participants with timeslot allocations (confirmation PoC system)
+	// Otherwise, weights were already capped in ComputeNewWeights
+	var needsPowerCapping bool = false
+	for _, vw := range epochGroupData.ValidationWeights {
+		for _, mlNode := range vw.MlNodes {
+			if mlNode != nil && len(mlNode.TimeslotAllocation) > 1 {
+				needsPowerCapping = true
+				break
+			}
+		}
+		if needsPowerCapping {
+			break
+		}
+	}
+
+	if needsPowerCapping {
+		cappedParticipants, wasCapped := ApplyPowerCappingForWeights(effectiveWeights)
+
+		// Map capped weights back to participants
+		for _, cappedParticipant := range cappedParticipants {
+			if cappedParticipant.Weight < 0 {
+				participantWeights[cappedParticipant.Index] = 0
+			} else {
+				participantWeights[cappedParticipant.Index] = uint64(cappedParticipant.Weight)
+			}
+		}
+
+		// Calculate total for logging
+		cappedTotal := uint64(0)
+		for _, weight := range participantWeights {
+			cappedTotal += weight
+		}
+
+		logger.Info("Bitcoin Rewards: Applied confirmation weight capping",
+			"cappedTotalWeight", cappedTotal,
+			"wasCapped", wasCapped)
+	} else {
+		// Backward compatibility: use effective weights directly (already capped in ComputeNewWeights)
+		for _, ew := range effectiveWeights {
+			if ew.Weight < 0 {
+				participantWeights[ew.Index] = 0
+			} else {
+				participantWeights[ew.Index] = uint64(ew.Weight)
+			}
+		}
+
+		logger.Info("Bitcoin Rewards: Using pre-capped weights (backward compatibility)",
+			"participantCount", len(effectiveWeights))
+	}
+
+	// Calculate total weight
+	totalPoCWeight := uint64(0)
+	for _, weight := range participantWeights {
+		totalPoCWeight += weight
+	}
+
+	// 4. Check and punish for downtime
 	logger.Info("Bitcoin Rewards: Checking downtime for participants", "participants", len(participants))
 	CheckAndPunishForDowntimeForParticipants(participants, participantWeights, logger)
 	logger.Info("Bitcoin Rewards: weights after downtime check", "participants", participantWeights)
 
-	// 3. Create settle results for each participant
+	// 5. Create settle results for each participant
 	settleResults := make([]*SettleResult, 0, len(participants))
 	var totalDistributed uint64 = 0
 
@@ -323,7 +597,7 @@ func CalculateParticipantBitcoinRewards(
 		})
 	}
 
-	// 4. Distribute any remainder due to integer division truncation
+	// 6. Distribute any remainder due to integer division truncation
 	// This ensures the complete fixed epoch reward is always distributed
 	remainder := fixedEpochReward - totalDistributed
 	if remainder > 0 && len(settleResults) > 0 {
@@ -337,7 +611,7 @@ func CalculateParticipantBitcoinRewards(
 		}
 	}
 
-	// 5. Create BitcoinResult (similar to SubsidyResult)
+	// 7. Create BitcoinResult (similar to SubsidyResult)
 	bitcoinResult := BitcoinResult{
 		Amount:       int64(fixedEpochReward),
 		EpochNumber:  currentEpoch,
