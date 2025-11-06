@@ -4,6 +4,7 @@ import (
 	"context"
 
 	upgradetypes "cosmossdk.io/x/upgrade/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/productscience/inference/x/inference/keeper"
 	"github.com/productscience/inference/x/inference/types"
@@ -26,6 +27,11 @@ func CreateUpgradeHandler(
 		}
 
 		err := setNewInvalidationParams(ctx, k, fromVM)
+		sdkCtx := sdk.UnwrapSDKContext(ctx)
+		if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
+			k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
+		}
+
 
 		// Run default module migrations.
 		toVM, err := mm.RunMigrations(ctx, configurator, fromVM)

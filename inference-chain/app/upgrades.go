@@ -66,6 +66,14 @@ func (app *App) registerMigrations() {
 		return nil
 	})
 
+	app.Configurator().RegisterMigration(inferencetypes.ModuleName, 7, func(ctx sdk.Context) error {
+		return nil
+	})
+
+	app.Configurator().RegisterMigration(inferencetypes.ModuleName, 8, func(ctx sdk.Context) error {
+		return app.InferenceKeeper.MigrateLegacyBridgeState(ctx)
+	})
+
 	app.Configurator().RegisterMigration(districutiontypes.ModuleName, 3, func(ctx sdk.Context) error {
 		return nil
 	})
