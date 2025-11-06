@@ -72,8 +72,7 @@ class ValidationTests : TestermintTest() {
     @Test
     @Timeout(15, unit = TimeUnit.MINUTES)
     @Order(Int.MAX_VALUE - 1)
-    @Tag("unstable")
-    fun `test invalid gets removed`() {
+    fun `test invalid gets removed and restored`() {
         val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
         cluster.allPairs.forEach { pair ->
             pair.waitForMlNodesToLoad()
@@ -104,6 +103,11 @@ class ValidationTests : TestermintTest() {
         assertThat(validators.validators).hasSize(3)
         val genesisValidator = validators.validators.first { it.consensusPubkey.value ==  genesisValidatorInfo.key }
         assertThat(genesisValidator.tokens).isEqualTo(0)
+        genesis.waitForNextEpoch()
+        val newParticipants = genesis.api.getActiveParticipants()
+        assertThat(newParticipants.excludedParticipants).isEmpty()
+        val removedRestored = newParticipants.activeParticipants.getParticipant(genesis)
+        assertNotNull(removedRestored, "Excluded participant was not restored")
     }
 
     @Test

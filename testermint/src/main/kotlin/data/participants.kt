@@ -1,7 +1,6 @@
 package com.productscience.data
 
 import com.productscience.LocalInferencePair
-import java.time.Instant
 
 data class ParticipantsResponse(
     val participants: List<Participant>,
@@ -49,7 +48,9 @@ data class ActiveParticipantsResponse(
     val addresses: List<String>,
     val validators: List<ActiveValidator>,
     val excludedParticipants: List<ExcludedParticipant>
-)
+) : HasParticipants<ActiveParticipant> {
+    override fun getParticipantList(): List<ActiveParticipant> = activeParticipants.participants
+}
 
 data class ExcludedParticipant(
     val address: String,
@@ -64,17 +65,19 @@ data class ActiveParticipants(
     val effectiveBlockHeight: Long,
     val createdAtBlockHeight: Long,
     val epochId: Long,
-)
+) : HasParticipants<ActiveParticipant> {
+    override fun getParticipantList(): List<ActiveParticipant> = participants
+}
 
 data class ActiveParticipant(
-    val index: String,
+    override val index: String,
     val validatorKey: String,
     val weight: Long,
     val inferenceUrl: String,
     val models: List<String>,
     val seed: Seed,
     val mlNodes: List<MlNodes>,
-)
+) : ParticipantInfo
 
 data class Seed(
     val participant: String,
@@ -112,13 +115,20 @@ data class RawParticipant(
 
 data class RawParticipantWrapper(
     val participant: List<RawParticipant>
-)
+) : HasParticipants<RawParticipant> {
+    override fun getParticipantList(): List<RawParticipant> = participant
+}
 
 interface ParticipantInfo {
     val index: String
 }
 
-@Suppress("UNCHECKED_CAST")
-fun <T : ParticipantInfo> Iterable<ParticipantInfo>.getParticipant(pair: LocalInferencePair): T? =
-    this.firstOrNull { it.index == pair.node.getColdAddress() } as? T
+interface HasParticipants<T : ParticipantInfo> {
+    fun getParticipantList(): Iterable<T>
+}
 
+inline fun <reified T : ParticipantInfo> Iterable<T>.getParticipant(pair: LocalInferencePair): T? =
+    this.firstOrNull { it.index == pair.node.getColdAddress() }
+
+inline fun <reified T: ParticipantInfo> HasParticipants<T>.getParticipant(pair: LocalInferencePair): T? =
+    this.getParticipantList().getParticipant(pair)
