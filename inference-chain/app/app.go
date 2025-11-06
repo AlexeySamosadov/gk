@@ -287,7 +287,7 @@ func New(
 	// The bank module automatically collects and applies all registered send restrictions
 
 	// register legacy modules
-	wasmConfig := app.registerLegacyModules(appOpts, wasmOpts)
+	nodeConfig := app.registerLegacyModules(appOpts, wasmOpts)
 
 	// register streaming services
 	if err := app.RegisterStreamingServices(appOpts, app.kvStoreKeys()); err != nil {
@@ -318,7 +318,7 @@ func New(
 	app.sm = module.NewSimulationManagerFromAppModules(app.ModuleManager.Modules, overrideModules)
 	app.sm.RegisterStoreDecoders()
 
-	app.setAnteHandler(app.txConfig, wasmConfig, app.GetKey(wasmtypes.StoreKey))
+	app.setAnteHandler(app.txConfig, nodeConfig, app.GetKey(wasmtypes.StoreKey))
 
 	app.registerMigrations()
 
