@@ -155,7 +155,8 @@ func (c InitValidateCommand) Execute(b *Broker) {
 		event := epochState.ActiveConfirmationPoCEvent
 		epochParams := &epochState.LatestEpoch.EpochParams
 		currentHeight := epochState.CurrentBlock.Height
-		if event.IsInValidationWindow(currentHeight, epochParams) {
+		// Accept at exchange end (transition) OR during validation window
+		if currentHeight == event.GetExchangeEnd(epochParams) || event.IsInValidationWindow(currentHeight, epochParams) {
 			shouldValidate = true
 		}
 	}

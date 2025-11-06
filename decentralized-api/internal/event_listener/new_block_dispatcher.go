@@ -332,9 +332,9 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 	}
 
 	if epochContext.IsStartOfPoCValidationStage(blockHeight) {
-		logging.Info("DapiStage:IsStartOfPoCValidationStage", types.Stages, "blockHeight", blockHeight, "blockHash", blockHash)
+		logging.Info("DapiStage:IsStartOfPoCValidationStage", types.Stages, "blockHeight", blockHeight, "blockHash", blockHash, "pocStartBlockHeight", epochContext.PocStartBlockHeight)
 		go func() {
-			d.nodePocOrchestrator.ValidateReceivedBatches(blockHeight)
+			d.nodePocOrchestrator.ValidateReceivedBatches(epochContext.PocStartBlockHeight)
 		}()
 	}
 
