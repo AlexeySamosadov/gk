@@ -84,26 +84,15 @@ data class ConfirmationPoCEvent(
     val triggerHeight: Long,
     @SerializedName("generation_start_height")
     val generationStartHeight: Long,
-    @SerializedName("generation_end_height")
-    val generationEndHeight: Long,
-    @SerializedName("validation_start_height")
-    val validationStartHeight: Long,
-    @SerializedName("validation_end_height")
-    val validationEndHeight: Long,
     val phase: ConfirmationPoCPhase,
     @SerializedName("poc_seed_block_hash")
-    val pocSeedBlockHash: String
+    val pocSeedBlockHash: String = ""
 )
 
-enum class ConfirmationPoCPhase {
-    @SerializedName("CONFIRMATION_POC_INACTIVE")
-    CONFIRMATION_POC_INACTIVE,
-    @SerializedName("CONFIRMATION_POC_GRACE_PERIOD")
-    CONFIRMATION_POC_GRACE_PERIOD,
-    @SerializedName("CONFIRMATION_POC_GENERATION")
-    CONFIRMATION_POC_GENERATION,
-    @SerializedName("CONFIRMATION_POC_VALIDATION")
-    CONFIRMATION_POC_VALIDATION,
-    @SerializedName("CONFIRMATION_POC_COMPLETED")
-    CONFIRMATION_POC_COMPLETED
+enum class ConfirmationPoCPhase(val value: Int) {
+    CONFIRMATION_POC_INACTIVE(0),
+    CONFIRMATION_POC_GRACE_PERIOD(1),
+    CONFIRMATION_POC_GENERATION(2),
+    CONFIRMATION_POC_VALIDATION(3),
+    CONFIRMATION_POC_COMPLETED(4)
 }
