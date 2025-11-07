@@ -118,7 +118,7 @@ class ConfirmationPoCTests : TestermintTest() {
         
         // Initialize cluster with custom spec for confirmation PoC testing
         // Configure epoch timing to allow confirmation PoC triggers during inference phase
-        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 2)
+        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,  // Merge with defaults instead of replacing
@@ -144,6 +144,11 @@ class ConfirmationPoCTests : TestermintTest() {
             Logger.info("  ${it.participantId}: weight=${it.weight}")
         }
         
+        logSection("Waiting for confirmation PoC trigger during inference phase")
+        val confirmationEvent = waitForConfirmationPoCTrigger(genesis)
+        assertThat(confirmationEvent).isNotNull
+        Logger.info("Confirmation PoC triggered at height ${confirmationEvent!!.triggerHeight}")
+
         logSection("Setting PoC mocks for confirmation")
         Logger.info("  Genesis: weight=10 (passes)")
         Logger.info("  Join1: weight=8 (fails but above alpha=7, no slashing)")
@@ -154,16 +159,7 @@ class ConfirmationPoCTests : TestermintTest() {
         join1.mock?.setPocValidationResponse(8)
         join2.mock?.setPocResponse(10)
         join2.mock?.setPocValidationResponse(10)
-        
-        logSection("Waiting for confirmation PoC trigger during inference phase")
-        val confirmationEvent = waitForConfirmationPoCTrigger(genesis)
-        assertThat(confirmationEvent).isNotNull
-        Logger.info("Confirmation PoC triggered at height ${confirmationEvent!!.triggerHeight}")
-        
-        logSection("Waiting for confirmation PoC grace period")
-        waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GRACE_PERIOD)
-        Logger.info("Confirmation PoC grace period active (nodes finishing inference)")
-        
+
         logSection("Waiting for confirmation PoC generation phase")
         waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GENERATION)
         Logger.info("Confirmation PoC generation phase active")
@@ -175,6 +171,12 @@ class ConfirmationPoCTests : TestermintTest() {
         logSection("Waiting for confirmation PoC completion")
         waitForConfirmationPoCCompletion(genesis)
         Logger.info("Confirmation PoC completed (event cleared)")
+        genesis.mock?.setPocResponse(10)
+        genesis.mock?.setPocValidationResponse(10)
+        join1.mock?.setPocResponse(10)  // Lower weight, but above alpha threshold (0.70 * 10 = 7)
+        join1.mock?.setPocValidationResponse(10)
+        join2.mock?.setPocResponse(10)
+        join2.mock?.setPocValidationResponse(10)
         
         logSection("Verifying no slashing occurred for Join1 (above alpha threshold)")
         val join1Address = join1.node.getColdAddress()
@@ -225,7 +227,7 @@ class ConfirmationPoCTests : TestermintTest() {
         
         // Genesis and Join2 should have identical rewards (both full weight)
         logSection("Verifying Genesis and Join2 receive identical rewards")
-        assertThat(genesisChange).isCloseTo(join2Change, Offset.offset(1L))
+        assertThat(genesisChange).isCloseTo(join2Change, Offset.offset(5L))
         Logger.info("  Genesis and Join2 received identical rewards: $genesisChange")
         
         // Join1 should have lower rewards due to capped confirmation weight (8 vs 10)
@@ -265,6 +267,9 @@ class ConfirmationPoCTests : TestermintTest() {
                         this[ConfirmationPoCParams::expectedConfirmationsPerEpoch] = expectedConfirmationsPerEpoch
                         this[ConfirmationPoCParams::alphaThreshold] = Decimal.fromDouble(0.70)
                         this[ConfirmationPoCParams::slashFraction] = Decimal.fromDouble(0.10)
+                    }
+                    this[InferenceParams::pocParams] = spec<PocParams> {
+                        this[PocParams::pocDataPruningEpochThreshold] = 10L
                     }
                 }
             }

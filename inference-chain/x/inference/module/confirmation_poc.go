@@ -316,6 +316,11 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 // updateConfirmationWeights calculates confirmation weights from PoC batches/validations
 // and updates EpochGroupData.ValidationWeights with minimum values
 func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.ConfirmationPoCEvent) error {
+	am.LogInfo("updateConfirmationWeights: Updating confirmation weights", types.PoC,
+		"epochIndex", event.EpochIndex,
+		"eventSequence", event.EventSequence,
+		"triggerHeight", event.TriggerHeight)
+
 	// Get current epoch's EpochGroupData
 	epochGroupData, found := am.keeper.GetEpochGroupData(ctx, event.EpochIndex, "")
 	if !found {
@@ -378,6 +383,9 @@ func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.
 		confirmationWeights[cp.Index] = cp.Weight
 	}
 
+	am.LogInfo("updateConfirmationWeights: Confirmation weights", types.PoC,
+		"confirmationWeights", confirmationWeights)
+
 	// Update ValidationWeights: confirmation_weight = min(current, calculated)
 	updated := false
 	for i, vw := range epochGroupData.ValidationWeights {
@@ -403,6 +411,9 @@ func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.
 	if updated {
 		am.keeper.SetEpochGroupData(ctx, epochGroupData)
 		am.LogInfo("updateConfirmationWeights: Saved updated EpochGroupData", types.PoC,
+			"epochIndex", event.EpochIndex)
+	} else {
+		am.LogInfo("updateConfirmationWeights: No update needed", types.PoC,
 			"epochIndex", event.EpochIndex)
 	}
 

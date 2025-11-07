@@ -204,6 +204,8 @@ data class ConfirmationPoCParams(
 
 data class PocParams(
     val defaultDifficulty: Int,
+    val validationSampleSize: Int,
+    val pocDataPruningEpochThreshold: Long,
 )
 
 data class GovState(

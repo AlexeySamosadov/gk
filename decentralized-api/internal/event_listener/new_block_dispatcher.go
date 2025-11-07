@@ -500,6 +500,24 @@ func (d *OnNewBlockDispatcher) triggerReconciliation(epochState chainphase.Epoch
 }
 
 func getCommandForPhase(phaseInfo chainphase.EpochState) (broker.Command, *chan bool) {
+	// Handle confirmation PoC during inference phase
+	if phaseInfo.CurrentPhase == types.InferencePhase && phaseInfo.ActiveConfirmationPoCEvent != nil {
+		event := phaseInfo.ActiveConfirmationPoCEvent
+
+		switch event.Phase {
+		case types.ConfirmationPoCPhase_CONFIRMATION_POC_GENERATION:
+			cmd := broker.NewStartPocCommand()
+			return cmd, &cmd.Response
+		case types.ConfirmationPoCPhase_CONFIRMATION_POC_VALIDATION:
+			cmd := broker.NewInitValidateCommand()
+			return cmd, &cmd.Response
+		}
+		// GRACE_PERIOD or COMPLETED - return to inference
+		cmd := broker.NewInferenceUpAllCommand()
+		return cmd, &cmd.Response
+	}
+
+	// Regular phase commands
 	switch phaseInfo.CurrentPhase {
 	case types.PoCGeneratePhase, types.PoCGenerateWindDownPhase:
 		cmd := broker.NewStartPocCommand()
