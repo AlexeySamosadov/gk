@@ -249,47 +249,43 @@ class ConfirmationPoCTests : TestermintTest() {
     
     @Test
     fun `confirmation PoC with multiple MLNodes - capped rewards with POC_SLOT allocation`() {
-        logSection("=== TEST: Confirmation PoC with Multi``ple MLNodes - POC_SLOT Allocation ===")
+        logSection("=== TEST: Confirmation PoC with Multiple MLNodes - POC_SLOT Allocation ===")
+        
+        // Configure join1 with 3 MLNodes BEFORE cluster initialization
+        // Reuse existing docker-compose files for additional mock servers
+        val config = inferenceConfig.copy(
+            additionalDockerFilesByKeyName = mapOf(
+                "join1" to listOf("docker-compose-local-mock-node-2.yml", "docker-compose-local-mock-node-3.yml")
+            ),
+            nodeConfigFileByKeyName = mapOf(
+                "join1" to "node_payload_mock-server_join1_3_nodes.json"
+            )
+        )
         
         // Initialize cluster with custom spec for confirmation PoC testing
         val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,
-            reboot = true
+            config = config,
+            reboot = true,
+            resetMlNodes = false  // Don't reset - we want to keep our 3-node configuration
         )
         
-        logSection("✅ Cluster Initialized Successfully!")
+        logSection("✅ Cluster Initialized Successfully with join1 having 3 MLNodes!")
         
         val join1 = cluster.joinPairs[0]
         val join2 = cluster.joinPairs[1]
         
-        logSection("Adding 2 additional MLNodes to Join1")
-        val additionalNodes = listOf(
-            InferenceNode(
-                host = "join1-mock-server",
-                models = mapOf(
-                    "Qwen/Qwen2.5-7B-Instruct" to ModelConfig(args = emptyList())
-                ),
-                id = "join1-node-2",
-                pocPort = 8081,
-                inferencePort = 8001,
-                maxConcurrent = 1
-            ),
-            InferenceNode(
-                host = "join1-mock-server",
-                models = mapOf(
-                    "Qwen/Qwen2.5-7B-Instruct" to ModelConfig(args = emptyList())
-                ),
-                id = "join1-node-3",
-                pocPort = 8082,
-                inferencePort = 8002,
-                maxConcurrent = 1
-            )
-        )
-        join1.api.addNodes(additionalNodes)
+        logSection("Verifying join1 has 3 mock server containers")
+        // The additional mock servers should have been started by initCluster with reboot=true
+        val join1Nodes = join1.api.getNodes()
+        Logger.info("Join1 has ${join1Nodes.size} nodes registered")
+        join1Nodes.forEach { node ->
+            Logger.info("  Node: ${node.node.id} at ${node.node.host}:${node.node.pocPort}")
+        }
         
-        logSection("Waiting for first PoC cycle to establish weights for all 3 nodes")
+        logSection("Waiting for first PoC cycle to establish weights for all 3 join1 nodes")
         genesis.waitForStage(EpochStage.START_OF_POC)
         
         // Set all nodes to weight=10 per node for initial PoC
