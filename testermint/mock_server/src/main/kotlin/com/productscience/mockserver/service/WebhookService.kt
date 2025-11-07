@@ -7,11 +7,24 @@ import io.ktor.http.*
 import kotlinx.coroutines.*
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.slf4j.LoggerFactory
+import java.util.UUID
+
+/**
+ * Delivery modes for PoC batches.
+ */
+enum class DeliveryMode {
+    WEBSOCKET,  // Only WebSocket (fail if not connected)
+    HTTP,       // Only HTTP callbacks
+    AUTO        // Try WebSocket first, fallback to HTTP (default)
+}
 
 /**
  * Service for handling webhook callbacks.
  */
-class WebhookService(private val responseService: ResponseService) {
+class WebhookService(
+    private val responseService: ResponseService,
+    private val wsManager: WebSocketManager
+) {
     private val client = HttpClient(CIO)
     private val mapper = jacksonObjectMapper()
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -22,6 +35,10 @@ class WebhookService(private val responseService: ResponseService) {
 
     // Default URL for batch validation webhooks
     private val batchValidationWebhookUrl = "http://localhost:9100/v1/poc-batches/validated"
+    
+    // Current delivery mode (default: AUTO)
+    @Volatile
+    var deliveryMode: DeliveryMode = DeliveryMode.AUTO
 
     /**
      * Extracts a value from a JSON string using a JSONPath-like expression.
@@ -36,6 +53,38 @@ class WebhookService(private val responseService: ResponseService) {
         return null
     }
 
+    /**
+     * Try to deliver a batch via WebSocket.
+     * @param batchType "generated" or "validated"
+     * @param batch The batch data as a map
+     * @return true if delivered successfully via WebSocket, false otherwise
+     */
+    private fun tryDeliverViaWebSocket(batchType: String, batch: Map<String, Any?>): Boolean {
+        if (!wsManager.isConnected()) {
+            logger.debug("WebSocket not connected, cannot deliver batch")
+            return false
+        }
+        
+        val batchId = UUID.randomUUID().toString()
+        
+        // Queue the message
+        if (!wsManager.queueBatchMessage(batchType, batch, batchId)) {
+            logger.debug("Failed to queue batch message in WebSocket queue")
+            return false
+        }
+        
+        // Wait for acknowledgment with timeout (matching ML node sender.py)
+        val ackReceived = wsManager.waitForAck(batchId, timeoutMs = 3000)
+        
+        if (ackReceived) {
+            logger.info("Successfully delivered $batchType batch via WebSocket")
+        } else {
+            logger.warn("Timeout waiting for WebSocket ACK for $batchType batch")
+        }
+        
+        return ackReceived
+    }
+    
     /**
      * Sends a webhook POST request after a delay.
      */
@@ -57,8 +106,9 @@ class WebhookService(private val responseService: ResponseService) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
+                logger.info("Successfully delivered batch via HTTP callback to $url")
             } catch (e: Exception) {
-                println("Error sending webhook: ${e.message}")
+                logger.error("Error sending webhook to $url: ${e.message}", e)
             }
         }
     }
@@ -93,8 +143,29 @@ class WebhookService(private val responseService: ResponseService) {
                     nodeNumber,
                 )
 
-                logger.info("Sending generate POC webhook to $webhookUrl with weight: $weight")
-                sendDelayedWebhook(webhookUrl, webhookBody)
+                // Parse the webhook body to get batch data
+                val batchData = mapper.readValue(webhookBody, Map::class.java) as Map<String, Any?>
+                
+                // Deliver based on mode
+                when (deliveryMode) {
+                    DeliveryMode.WEBSOCKET -> {
+                        logger.info("Delivery mode: WEBSOCKET only")
+                        if (!tryDeliverViaWebSocket("generated", batchData)) {
+                            logger.error("Failed to deliver generated batch via WebSocket (WebSocket-only mode)")
+                        }
+                    }
+                    DeliveryMode.HTTP -> {
+                        logger.info("Delivery mode: HTTP only")
+                        sendDelayedWebhook(webhookUrl, webhookBody)
+                    }
+                    DeliveryMode.AUTO -> {
+                        logger.info("Delivery mode: AUTO (WebSocket with HTTP fallback)")
+                        if (!tryDeliverViaWebSocket("generated", batchData)) {
+                            logger.info("WebSocket delivery failed, falling back to HTTP")
+                            sendDelayedWebhook(webhookUrl, webhookBody)
+                        }
+                    }
+                }
             } else {
                 logger.warn("Missing required fields in generate POC webhook request: url=$url, publicKey=$publicKey, blockHash=$blockHash, blockHeight=$blockHeight")
             }
@@ -135,12 +206,34 @@ class WebhookService(private val responseService: ResponseService) {
                     }
                 """.trimIndent()
 
+                // Parse the webhook body to get batch data
+                val batchData = mapper.readValue(webhookBody, Map::class.java) as Map<String, Any?>
+
                 val keyName = (System.getenv("KEY_NAME") ?: "localhost")
-                // Use the validation webhook delay
                 val webHookUrl = "http://$keyName-api:9100/v1/poc-batches/validated"
-                logger.info("Sending batch validation webhook to $webHookUrl with delay: ${validationWebhookDelay}ms")
-                logger.debug("Batch validation webhook body: $webhookBody")
-                sendDelayedWebhook(webHookUrl, webhookBody, delayMillis = validationWebhookDelay)
+                
+                // Deliver based on mode
+                when (deliveryMode) {
+                    DeliveryMode.WEBSOCKET -> {
+                        logger.info("Delivery mode: WEBSOCKET only")
+                        if (!tryDeliverViaWebSocket("validated", batchData)) {
+                            logger.error("Failed to deliver validated batch via WebSocket (WebSocket-only mode)")
+                        }
+                    }
+                    DeliveryMode.HTTP -> {
+                        logger.info("Delivery mode: HTTP only")
+                        logger.info("Sending batch validation webhook to $webHookUrl with delay: ${validationWebhookDelay}ms")
+                        sendDelayedWebhook(webHookUrl, webhookBody, delayMillis = validationWebhookDelay)
+                    }
+                    DeliveryMode.AUTO -> {
+                        logger.info("Delivery mode: AUTO (WebSocket with HTTP fallback)")
+                        if (!tryDeliverViaWebSocket("validated", batchData)) {
+                            logger.info("WebSocket delivery failed, falling back to HTTP")
+                            logger.info("Sending batch validation webhook to $webHookUrl with delay: ${validationWebhookDelay}ms")
+                            sendDelayedWebhook(webHookUrl, webhookBody, delayMillis = validationWebhookDelay)
+                        }
+                    }
+                }
             } else {
                 logger.warn("Missing required fields in validate POC batch webhook request: publicKey=$publicKey, blockHash=$blockHash, blockHeight=$blockHeight, nonces=$nonces, dist=$dist")
             }

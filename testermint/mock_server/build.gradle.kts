@@ -20,6 +20,7 @@ dependencies {
     implementation("io.ktor:ktor-serialization-jackson:2.3.9")
     implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.9")
     implementation("io.ktor:ktor-server-call-logging:2.3.9")
+    implementation("io.ktor:ktor-server-websockets:2.3.9")
 
     // Ktor client dependencies
     implementation("io.ktor:ktor-client-core:2.3.9")

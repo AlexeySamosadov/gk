@@ -1,5 +1,6 @@
 package com.productscience.mockserver
 
+import com.productscience.mockserver.routes.configRoutes
 import com.productscience.mockserver.routes.fileRoutes
 import com.productscience.mockserver.routes.healthRoutes
 import com.productscience.mockserver.routes.inferenceRoutes
@@ -12,6 +13,7 @@ import com.productscience.mockserver.routes.trainRoutes
 import com.productscience.mockserver.service.ResponseService
 import com.productscience.mockserver.service.TokenizationService
 import com.productscience.mockserver.service.WebhookService
+import com.productscience.mockserver.service.WebSocketManager
 import io.ktor.serialization.jackson.jackson
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
@@ -25,14 +27,19 @@ import io.ktor.server.request.path
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.pingPeriod
+import io.ktor.server.websocket.timeout
 import io.ktor.util.AttributeKey
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
+import java.time.Duration
 
 // Define keys for services
 val WebhookServiceKey = AttributeKey<WebhookService>("WebhookService")
 val ResponseServiceKey = AttributeKey<ResponseService>("ResponseService")
 val TokenizationServiceKey = AttributeKey<TokenizationService>("TokenizationService")
+val WebSocketManagerKey = AttributeKey<WebSocketManager>("WebSocketManager")
 
 fun main() {
     embeddedServer(Netty, port = 8080, host = "0.0.0.0", module = Application::module)
@@ -42,6 +49,7 @@ fun main() {
 fun Application.module() {
     configureLogging()
     configureSerialization()
+    configureWebSockets()
     configureServices()
     configureRouting()
 }
@@ -49,7 +57,7 @@ fun Application.module() {
 fun Application.configureLogging() {
     install(CallLogging) {
         level = Level.DEBUG
-        filter { call -> true } // Log all requests
+        filter { _ -> true } // Log all requests
         format { call ->
             val status = call.response.status()
             val httpMethod = call.request.httpMethod.value
@@ -62,13 +70,15 @@ fun Application.configureLogging() {
 fun Application.configureServices() {
     // Create single instances of services to be used by all routes
     val responseService = ResponseService()
-    val webhookService = WebhookService(responseService)
+    val wsManager = WebSocketManager()
+    val webhookService = WebhookService(responseService, wsManager)
     val tokenizationService = TokenizationService()
 
     // Register the services in the application's attributes
     attributes.put(WebhookServiceKey, webhookService)
     attributes.put(ResponseServiceKey, responseService)
     attributes.put(TokenizationServiceKey, tokenizationService)
+    attributes.put(WebSocketManagerKey, wsManager)
 }
 
 fun Application.configureRouting() {
@@ -76,6 +86,7 @@ fun Application.configureRouting() {
     val webhookService = attributes[WebhookServiceKey]
     val responseService = attributes[ResponseServiceKey]
     val tokenizationService = attributes[TokenizationServiceKey]
+    val wsManager = attributes[WebSocketManagerKey]
 
     routing {
         // Server status endpoint
@@ -91,13 +102,14 @@ fun Application.configureRouting() {
 
         // Register all the route handlers
         stateRoutes()
-        powRoutes(webhookService)
+        powRoutes(webhookService, wsManager)
         inferenceRoutes(responseService)
         trainRoutes()
         stopRoutes()
         healthRoutes()
         responseRoutes(responseService)
         tokenizationRoutes(tokenizationService)
+        configRoutes(webhookService)
         fileRoutes() // Route for serving files
     }
 }
@@ -105,5 +117,14 @@ fun Application.configureRouting() {
 fun Application.configureSerialization() {
     install(ContentNegotiation) {
         jackson()
+    }
+}
+
+fun Application.configureWebSockets() {
+    install(WebSockets) {
+        pingPeriod = Duration.ofSeconds(15)
+        timeout = Duration.ofSeconds(60)
+        maxFrameSize = Long.MAX_VALUE
+        masking = false
     }
 }
