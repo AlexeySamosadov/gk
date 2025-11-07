@@ -96,6 +96,23 @@ func (am AppModule) checkConfirmationPoCTrigger(
 		return nil
 	}
 
+	// Check for upgrades within upgrade protection window
+	upgradeProtectionWindow := confirmationParams.UpgradeProtectionWindow
+	if upgradeProtectionWindow <= 0 {
+		upgradeProtectionWindow = 500 // Default to 500 blocks if not set
+	}
+	hasUpgrade, reason, err := am.keeper.HasUpgradeInWindow(ctx, blockHeight, upgradeProtectionWindow)
+	if err != nil {
+		return fmt.Errorf("failed to check upgrade window: %w", err)
+	}
+	if hasUpgrade {
+		am.LogDebug("Skipping confirmation PoC trigger due to upgrade protection", types.PoC,
+			"blockHeight", blockHeight,
+			"upgradeProtectionWindow", upgradeProtectionWindow,
+			"reason", reason)
+		return nil
+	}
+
 	// Calculate valid trigger window
 	// [SetNewValidators(), NextPoCStart - InferenceValidationCutoff - ConfirmationWindowDuration]
 	setNewValidatorsHeight := epochContext.SetNewValidators()

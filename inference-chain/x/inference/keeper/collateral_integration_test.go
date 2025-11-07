@@ -93,6 +93,7 @@ func setupRealKeepers(t testing.TB) (sdk.Context, keeper.Keeper, collateralKeepe
 		authority.String(),
 	)
 
+	upgradeMock := keepertest.NewMockUpgradeKeeper(ctrl)
 	inferenceKeeper := keeper.NewKeeper(
 		cdc,
 		runtime.NewKVStoreService(inferenceStoreKey),
@@ -109,6 +110,7 @@ func setupRealKeepers(t testing.TB) (sdk.Context, keeper.Keeper, collateralKeepe
 		streamvestingMock,
 		authzMock,
 		nil,
+		upgradeMock,
 	)
 
 	// Initialize default params for both keepers

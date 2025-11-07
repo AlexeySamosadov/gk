@@ -47,6 +47,7 @@ var (
 	ExcludedParticipantsPrefix       = collections.NewPrefix(24)
 	ConfirmationPoCEventsPrefix      = collections.NewPrefix(25)
 	ActiveConfirmationPoCEventPrefix = collections.NewPrefix(26)
+	LastUpgradeHeightPrefix          = collections.NewPrefix(27)
 	ParamsKey                        = []byte("p_inference")
 )
 

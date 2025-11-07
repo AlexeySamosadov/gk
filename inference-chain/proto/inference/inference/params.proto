@@ -215,4 +215,7 @@ message ConfirmationPoCParams {
 
   // slash_fraction is the collateral slashed for failure (e.g., "0.10")
   Decimal slash_fraction = 3;
+
+  // upgrade_protection_window is blocks before/after upgrade to skip confirmation PoC (default: 500)
+  int64 upgrade_protection_window = 4;
 }
