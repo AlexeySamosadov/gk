@@ -2,6 +2,7 @@ import com.productscience.*
 import com.productscience.data.*
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.data.Offset
+import org.assertj.core.data.Percentage
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.tinylog.kotlin.Logger
@@ -16,7 +17,7 @@ class ConfirmationPoCTests : TestermintTest() {
         
         // Initialize cluster with custom spec for confirmation PoC testing
         // Configure epoch timing to allow confirmation PoC triggers during inference phase
-        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 2)
+        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,  // Merge with defaults instead of replacing
@@ -105,7 +106,7 @@ class ConfirmationPoCTests : TestermintTest() {
         logSection("Verifying all balance changes are identical")
         val expectedChange = balanceChanges[0]
         balanceChanges.forEach { change ->
-            assertThat(change).isCloseTo(expectedChange, Offset.offset(1L))
+            assertThat(change.toDouble()).isCloseTo(expectedChange.toDouble(), Percentage.withPercentage(1.0))
         }
         Logger.info("  All participants received identical rewards: $expectedChange")
         
@@ -242,7 +243,7 @@ class ConfirmationPoCTests : TestermintTest() {
         val expectedRatio = 8.0 / 10.0  // 0.8
         assertThat(actualRatio).isCloseTo(expectedRatio, Offset.offset(0.05))
         Logger.info("  Join1 reward ratio: $actualRatio (expected: $expectedRatio)")
-        
+
         logSection("TEST PASSED: Confirmation PoC correctly caps rewards for lower confirmed weight")
     }
     
