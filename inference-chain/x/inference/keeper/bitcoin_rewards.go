@@ -25,6 +25,7 @@ func GetBitcoinSettleAmounts(
 	epochGroupData *types.EpochGroupData,
 	bitcoinParams *types.BitcoinRewardParams,
 	settleParams *SettleParameters,
+	participantMLNodes map[string][]*types.MLNodeInfo,
 	logger log.Logger,
 ) ([]*SettleResult, BitcoinResult, error) {
 	if participants == nil {
@@ -47,7 +48,7 @@ func GetBitcoinSettleAmounts(
 	// 3. Complete distribution with remainder handling
 	// 4. Invalid participant handling
 	// 5. Error management
-	settleResults, bitcoinResult, err := CalculateParticipantBitcoinRewards(participants, epochGroupData, bitcoinParams, logger)
+	settleResults, bitcoinResult, err := CalculateParticipantBitcoinRewards(participants, epochGroupData, bitcoinParams, participantMLNodes, logger)
 	if err != nil {
 		logger.Error("Error calculating participant bitcoin rewards", "error", err)
 		return settleResults, bitcoinResult, err
@@ -176,10 +177,16 @@ func GetPreservedWeight(participant string, epochGroupData *types.EpochGroupData
 
 // RecomputeEffectiveWeightFromMLNodes recalculates participant weight from uncapped MLNode weights
 // This allows integration of confirmation_weight for nodes subject to verification
-func RecomputeEffectiveWeightFromMLNodes(vw *types.ValidationWeight) int64 {
+func RecomputeEffectiveWeightFromMLNodes(vw *types.ValidationWeight, mlNodes []*types.MLNodeInfo) int64 {
 	preservedWeight := int64(0) // Sum POC_SLOT=true nodes only
 
-	for _, mlNode := range vw.MlNodes {
+	// Use provided mlNodes if available (from model subgroups), otherwise fall back to vw.MlNodes
+	nodesToUse := mlNodes
+	if len(nodesToUse) == 0 {
+		nodesToUse = vw.MlNodes
+	}
+
+	for _, mlNode := range nodesToUse {
 		if mlNode == nil || len(mlNode.TimeslotAllocation) < 2 {
 			continue
 		}
@@ -401,6 +408,7 @@ func CalculateParticipantBitcoinRewards(
 	participants []types.Participant,
 	epochGroupData *types.EpochGroupData,
 	bitcoinParams *types.BitcoinRewardParams,
+	participantMLNodes map[string][]*types.MLNodeInfo,
 	logger log.Logger,
 ) ([]*SettleResult, BitcoinResult, error) {
 	// Parameter validation
@@ -450,7 +458,8 @@ func CalculateParticipantBitcoinRewards(
 		}
 
 		// Recompute effective weight from MLNodes (includes confirmation capping)
-		effectiveWeight := RecomputeEffectiveWeightFromMLNodes(vw)
+		mlNodes := participantMLNodes[participant.Address]
+		effectiveWeight := RecomputeEffectiveWeightFromMLNodes(vw, mlNodes)
 		if effectiveWeight < 0 {
 			effectiveWeight = 0
 		}
