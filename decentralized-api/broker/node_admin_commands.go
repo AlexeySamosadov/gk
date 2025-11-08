@@ -92,8 +92,8 @@ func (c RegisterNode) Execute(b *Broker) {
 	}
 
 	func() {
-		b.mu.Lock()
-		defer b.mu.Unlock()
+		b.writeLock("RegisterNode. Adding node")
+		defer b.writeUnlock("RegisterNode. Added node")
 		b.nodes[c.Node.Id] = nodeWithState
 
 		// Create and register a worker for this node
@@ -152,8 +152,8 @@ func (c UpdateNode) Execute(b *Broker) {
 	}
 
 	// Fetch existing node
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.writeLock("UpdateNode. Id: " + c.Node.Id)
+	defer b.writeUnlock("UpdateNode. Id: " + c.Node.Id)
 
 	existing, exists := b.nodes[c.Node.Id]
 	if !exists {
@@ -204,8 +204,8 @@ func (command RemoveNode) Execute(b *Broker) {
 	// Remove the worker first (it will wait for pending jobs)
 	b.nodeWorkGroup.RemoveWorker(command.NodeId)
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.writeLock("RemoveNode. Id: " + command.NodeId)
+	defer b.writeUnlock("RemoveNode. Id: " + command.NodeId)
 
 	if _, ok := b.nodes[command.NodeId]; !ok {
 		command.Response <- false
@@ -228,6 +228,8 @@ func (c SetNodeAdminStateCommand) GetResponseChannelCapacity() int {
 }
 
 func (c SetNodeAdminStateCommand) Execute(b *Broker) {
+	b.writeLock("SetNodeAdminStateCommand for node " + c.NodeId)
+	defer b.writeUnlock("SetNodeAdminStateCommand for node " + c.NodeId)
 	// Get current epoch
 	var currentEpoch uint64
 	if b.phaseTracker != nil {
@@ -239,7 +241,6 @@ func (c SetNodeAdminStateCommand) Execute(b *Broker) {
 		}
 	}
 
-	b.mu.Lock()
 	node, exists := b.nodes[c.NodeId]
 	if !exists {
 		c.Response <- fmt.Errorf("node not found: %s", c.NodeId)
@@ -249,7 +250,6 @@ func (c SetNodeAdminStateCommand) Execute(b *Broker) {
 	// Update admin state
 	node.State.AdminState.Enabled = c.Enabled
 	node.State.AdminState.Epoch = currentEpoch
-	b.mu.Unlock()
 
 	logging.Info("Updated node admin state", types.Nodes,
 		"node_id", c.NodeId,
@@ -271,8 +271,8 @@ func (c UpdateNodeHardwareCommand) GetResponseChannelCapacity() int {
 }
 
 func (c UpdateNodeHardwareCommand) Execute(b *Broker) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.writeLock("UpdateNodeHardwareCommand for node " + c.NodeId)
+	defer b.writeUnlock("UpdateNodeHardwareCommand for node " + c.NodeId)
 
 	node, exists := b.nodes[c.NodeId]
 	if !exists {

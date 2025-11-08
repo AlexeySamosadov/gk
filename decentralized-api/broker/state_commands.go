@@ -52,7 +52,8 @@ func (c StartPocCommand) Execute(b *Broker) {
 		return
 	}
 
-	b.mu.Lock()
+	b.writeLock("StartPocCommand:")
+	defer b.writeUnlock("StartPocCommand:")
 	for _, node := range b.nodes {
 		// Check if node should be operational based on admin state
 		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) {
@@ -76,7 +77,6 @@ func (c StartPocCommand) Execute(b *Broker) {
 			node.State.PocIntendedStatus = PocStatusGenerating
 		}
 	}
-	b.mu.Unlock()
 
 	c.Response <- true
 }
@@ -153,7 +153,8 @@ func (c InitValidateCommand) Execute(b *Broker) {
 		return
 	}
 
-	b.mu.Lock()
+	b.writeLock("InitValidateCommand:")
+	defer b.writeUnlock("InitValidateCommand:")
 	for _, node := range b.nodes {
 		// Check if node should be operational based on admin state
 		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) {
@@ -176,7 +177,6 @@ func (c InitValidateCommand) Execute(b *Broker) {
 			node.State.PocIntendedStatus = PocStatusValidating
 		}
 	}
-	b.mu.Unlock()
 
 	c.Response <- true
 }
@@ -250,7 +250,8 @@ func (c InferenceUpAllCommand) Execute(b *Broker) {
 		return
 	}
 
-	b.mu.Lock()
+	b.writeLock("InferenceUpAllCommand:")
+	defer b.writeUnlock("InferenceUpAllCommand:")
 	for _, node := range b.nodes {
 		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) {
 			logging.Info("Skipping inference up for administratively disabled node", types.PoC,
@@ -278,7 +279,6 @@ func (c InferenceUpAllCommand) Execute(b *Broker) {
 			node.State.IntendedStatus = types.HardwareNodeStatus_INFERENCE
 		}
 	}
-	b.mu.Unlock()
 
 	c.Response <- true
 }
@@ -329,8 +329,8 @@ func (c SetNodesActualStatusCommand) GetResponseChannelCapacity() int {
 }
 
 func (c SetNodesActualStatusCommand) Execute(b *Broker) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.writeLock("SetNodesActualStatusCommand")
+	defer b.writeUnlock("SetNodesActualStatusCommand")
 
 	for _, update := range c.StatusUpdates {
 		nodeId := update.NodeId

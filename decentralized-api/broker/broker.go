@@ -683,8 +683,8 @@ func (b *Broker) calculateNodesDiff(chainNodesMap map[string]*types.HardwareNode
 }
 
 func (b *Broker) lockNodesForTraining(command LockNodesForTrainingCommand) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.writeLock("lockNodesForTraining")
+	defer b.writeUnlock("lockNodesForTraining")
 	// PRTODO: implement
 	command.Response <- true
 }
@@ -948,12 +948,14 @@ func (b *Broker) reconcile(epochState chainphase.EpochState) {
 	for id, cancel := range nodesToCancel {
 		logging.Info("Cancelling outdated task for node", types.Nodes, "node_id", id, "blockHeight", blockHeight)
 		cancel()
-		b.mu.Lock()
-		if node, ok := b.nodes[id]; ok {
-			node.State.ReconcileInfo = nil
-			node.State.cancelInFlightTask = nil
-		}
-		b.mu.Unlock()
+		func() {
+			b.writeLock("Cancel outdated task for node")
+			defer b.writeUnlock("Cancel outdated task for node")
+			if node, ok := b.nodes[id]; ok {
+				node.State.ReconcileInfo = nil
+				node.State.cancelInFlightTask = nil
+			}
+		}()
 	}
 
 	nodesToDispatch := make(map[string]*NodeWithState)
@@ -975,70 +977,77 @@ func (b *Broker) reconcile(epochState chainphase.EpochState) {
 	currentPoCParams, pocParamsErr := b.prefetchPocParams(epochState, nodesToDispatch, blockHeight)
 
 	for id, node := range nodesToDispatch {
-		// Re-check conditions under write lock to prevent races
-		b.mu.Lock()
-		currentNode, ok := b.nodes[id]
-		if !ok ||
-			(currentNode.State.IntendedStatus == currentNode.State.CurrentStatus && (currentNode.State.CurrentStatus != types.HardwareNodeStatus_POC || currentNode.State.PocIntendedStatus == currentNode.State.PocCurrentStatus)) ||
-			currentNode.State.ReconcileInfo != nil {
-			b.mu.Unlock()
-			continue
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		intendedStatusCopy := currentNode.State.IntendedStatus
-		pocIntendedStatusCopy := currentNode.State.PocIntendedStatus
-		currentNode.State.ReconcileInfo = &ReconcileInfo{
-			Status:    intendedStatusCopy,
-			PocStatus: pocIntendedStatusCopy,
-		}
-		currentNode.State.cancelInFlightTask = cancel
-
-		worker, exists := b.nodeWorkGroup.GetWorker(id)
-		b.mu.Unlock()
-
-		if !exists {
-			logging.Error("Worker not found for reconciliation", types.Nodes, "node_id", id, "blockHeight", blockHeight)
-			cancel() // Cancel context if worker doesn't exist
-			b.mu.Lock()
-			if nodeToClean, ok := b.nodes[id]; ok {
-				nodeToClean.State.ReconcileInfo = nil
-				nodeToClean.State.cancelInFlightTask = nil
-			}
-			b.mu.Unlock()
-			continue
-		}
-
-		// TODO: we should make reindexing as some indexes might be skipped
-		totalNumNodes := b.curMaxNodesNum.Load() + 1
-		// Create and dispatch the command
-		cmd := b.getCommandForState(&node.State, currentPoCParams, pocParamsErr, int(totalNumNodes))
-		if cmd != nil {
-			logging.Info("Dispatching reconciliation command", types.Nodes,
-				"node_id", id, "target_status", node.State.IntendedStatus, "target_poc_status", node.State.PocIntendedStatus, "blockHeight", blockHeight)
-			if !worker.Submit(ctx, cmd) {
-				logging.Error("Failed to submit reconciliation command", types.Nodes, "node_id", id, "blockHeight", blockHeight)
-				cancel()
-				b.mu.Lock()
-				if nodeToClean, ok := b.nodes[id]; ok {
-					nodeToClean.State.ReconcileInfo = nil
-					nodeToClean.State.cancelInFlightTask = nil
-				}
-				b.mu.Unlock()
-			}
-		} else {
-			logging.Info("No valid command for reconciliation, cleaning up", types.Nodes, "node_id", id)
-			cancel()
-			b.mu.Lock()
-			if nodeToClean, ok := b.nodes[id]; ok {
-				nodeToClean.State.ReconcileInfo = nil
-				nodeToClean.State.cancelInFlightTask = nil
-			}
-			b.mu.Unlock()
-		}
+		b.dispatchNode(id, node, currentPoCParams, pocParamsErr, blockHeight)
 	}
 }
 
+func (b *Broker) writeLock(reason string) {
+	logging.Debug("WriteLock:acquiring", types.Nodes, "reason", reason)
+	b.mu.Lock()
+	logging.Debug("WriteLock:acquired", types.Nodes, "reason", reason)
+}
+
+func (b *Broker) writeUnlock(reason string) {
+	logging.Debug("WriteLock:releasing", types.Nodes, "reason", reason)
+	b.mu.Unlock()
+	logging.Debug("WriteLock:released", types.Nodes, "reason", reason)
+}
+func (b *Broker) dispatchNode(id string, node *NodeWithState, params *pocParams, err error, blockHeight int64) {
+	// Re-check conditions under write lock to prevent races
+	b.writeLock("Dispatch node " + id)
+	defer b.writeUnlock("Dispatch node " + id)
+	currentNode, ok := b.nodes[id]
+	if !ok ||
+		(currentNode.State.IntendedStatus == currentNode.State.CurrentStatus && (currentNode.State.CurrentStatus != types.HardwareNodeStatus_POC || currentNode.State.PocIntendedStatus == currentNode.State.PocCurrentStatus)) ||
+		currentNode.State.ReconcileInfo != nil {
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	intendedStatusCopy := currentNode.State.IntendedStatus
+	pocIntendedStatusCopy := currentNode.State.PocIntendedStatus
+	currentNode.State.ReconcileInfo = &ReconcileInfo{
+		Status:    intendedStatusCopy,
+		PocStatus: pocIntendedStatusCopy,
+	}
+	currentNode.State.cancelInFlightTask = cancel
+
+	worker, exists := b.nodeWorkGroup.GetWorker(id)
+
+	if !exists {
+		logging.Error("Worker not found for reconciliation", types.Nodes, "node_id", id, "blockHeight", blockHeight)
+		cancel() // Cancel context if worker doesn't exist
+		if nodeToClean, ok := b.nodes[id]; ok {
+			nodeToClean.State.ReconcileInfo = nil
+			nodeToClean.State.cancelInFlightTask = nil
+		}
+		return
+	}
+
+	// TODO: we should make reindexing as some indexes might be skipped
+	totalNumNodes := b.curMaxNodesNum.Load() + 1
+	// Create and dispatch the command
+	cmd := b.getCommandForState(&node.State, params, err, int(totalNumNodes))
+	if cmd != nil {
+		logging.Info("Dispatching reconciliation command", types.Nodes,
+			"node_id", id, "target_status", node.State.IntendedStatus, "target_poc_status", node.State.PocIntendedStatus, "blockHeight", blockHeight)
+		if !worker.Submit(ctx, cmd) {
+			logging.Error("Failed to submit reconciliation command", types.Nodes, "node_id", id, "blockHeight", blockHeight)
+			cancel()
+			if nodeToClean, ok := b.nodes[id]; ok {
+				nodeToClean.State.ReconcileInfo = nil
+				nodeToClean.State.cancelInFlightTask = nil
+			}
+		}
+	} else {
+		logging.Info("No valid command for reconciliation, cleaning up", types.Nodes, "node_id", id)
+		cancel()
+		if nodeToClean, ok := b.nodes[id]; ok {
+			nodeToClean.State.ReconcileInfo = nil
+			nodeToClean.State.cancelInFlightTask = nil
+		}
+	}
+}
 func (b *Broker) prefetchPocParams(epochState chainphase.EpochState, nodesToDispatch map[string]*NodeWithState, blockHeight int64) (*pocParams, error) {
 	needsPocParams := false
 	for _, node := range nodesToDispatch {
@@ -1318,8 +1327,8 @@ func (b *Broker) UpdateNodeWithEpochData(epochState *chainphase.EpochState) erro
 }
 
 func (b *Broker) clearNodeEpochData() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.writeLock("Clear node epoch data")
+	defer b.writeUnlock("Clear node epoch data")
 
 	logging.Info("Clearing node epoch data", types.Nodes)
 	for _, node := range b.nodes {
@@ -1329,8 +1338,8 @@ func (b *Broker) clearNodeEpochData() {
 }
 
 func (b *Broker) UpdateNodeEpochData(mlNodes []*types.MLNodeInfo, modelId string, modelSnapshot types.Model) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.writeLock("Update node epoch data for model " + modelId)
+	defer b.writeUnlock("Update node epoch data for model " + modelId)
 
 	for _, mlNodeInfo := range mlNodes {
 		if node, ok := b.nodes[mlNodeInfo.NodeId]; ok {
