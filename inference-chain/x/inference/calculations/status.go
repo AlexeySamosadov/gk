@@ -122,6 +122,9 @@ func getFailedConfirmationPoCStatus(newStats *types.CurrentEpochStats, parameter
 	if parameters == nil || parameters.AlphaThreshold == nil || parameters.AlphaThreshold.ToDecimal().Equal(decimal.Zero) {
 		return Pass
 	}
+	if newStats.ConfirmationPoCRatio == nil {
+		return Pass
+	}
 	if newStats.ConfirmationPoCRatio.ToDecimal().LessThan(parameters.AlphaThreshold.ToDecimal()) {
 		return Fail
 	}

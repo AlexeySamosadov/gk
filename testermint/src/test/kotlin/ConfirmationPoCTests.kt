@@ -248,6 +248,135 @@ class ConfirmationPoCTests : TestermintTest() {
     }
     
     @Test
+    fun `confirmation PoC failed - participant jailed for ratio below alpha`() {
+        logSection("=== TEST: Confirmation PoC Failed - Participant Jailed ===")
+        
+        // Initialize cluster with custom spec for confirmation PoC testing
+        // Configure with AlphaThreshold = 0.5 (lower than standard 0.70)
+        val confirmationSpec = createConfirmationPoCSpec(
+            expectedConfirmationsPerEpoch = 100,
+            alphaThreshold = 0.5
+        )
+        val (cluster, genesis) = initCluster(
+            joinCount = 2,
+            mergeSpec = confirmationSpec,
+            reboot = true
+        )
+        
+        logSection("✅ Cluster Initialized Successfully!")
+        
+        val join1 = cluster.joinPairs[0]
+        val join2 = cluster.joinPairs[1]
+        
+        logSection("Verifying cluster initialized with 3 participants")
+        val allPairs = listOf(genesis, join1, join2)
+        assertThat(allPairs).hasSize(3)
+        
+        logSection("Waiting for first PoC cycle to establish regular weights")
+        genesis.waitForStage(EpochStage.START_OF_POC)
+        genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
+        
+        val initialStats = genesis.node.getParticipantCurrentStats()
+        logSection("Initial participant weights:")
+        initialStats.participantCurrentStats?.forEach {
+            Logger.info("  ${it.participantId}: weight=${it.weight}")
+        }
+        
+        logSection("Waiting for confirmation PoC trigger during inference phase")
+        val confirmationEvent = waitForConfirmationPoCTrigger(genesis)
+        assertThat(confirmationEvent).isNotNull
+        Logger.info("Confirmation PoC triggered at height ${confirmationEvent!!.triggerHeight}")
+
+        logSection("Setting PoC mocks for confirmation")
+        Logger.info("  Genesis: weight=10 (passes)")
+        Logger.info("  Join1: weight=3 (fails, ratio=0.3 < alpha=0.5)")
+        Logger.info("  Join2: weight=10 (passes)")
+        genesis.mock?.setPocResponse(10)
+        genesis.mock?.setPocValidationResponse(10)
+        join1.mock?.setPocResponse(3)  // Very low weight - fails alpha threshold (0.5 * 10 = 5)
+        join1.mock?.setPocValidationResponse(3)
+        join2.mock?.setPocResponse(10)
+        join2.mock?.setPocValidationResponse(10)
+
+        logSection("Waiting for confirmation PoC generation phase")
+        waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GENERATION)
+        Logger.info("Confirmation PoC generation phase active")
+        
+        logSection("Waiting for confirmation PoC validation phase")
+        waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_VALIDATION)
+        Logger.info("Confirmation PoC validation phase active")
+        
+        logSection("Waiting for confirmation PoC completion")
+        waitForConfirmationPoCCompletion(genesis)
+        Logger.info("Confirmation PoC completed (event cleared)")
+        
+        // Reset mocks to full weight after confirmation
+        genesis.mock?.setPocResponse(10)
+        genesis.mock?.setPocValidationResponse(10)
+        join1.mock?.setPocResponse(10)
+        join1.mock?.setPocValidationResponse(10)
+        join2.mock?.setPocResponse(10)
+        join2.mock?.setPocValidationResponse(10)
+        
+        logSection("Verifying Join1 is jailed (removed from bonded validators)")
+        val join1Address = join1.node.getColdAddress()
+        val validatorsAfterPoC = genesis.node.getValidators()
+        val join1ValidatorAfterPoC = validatorsAfterPoC.validators.find { 
+            it.consensusPubkey.value == join1.node.getValidatorInfo().key 
+        }
+        assertThat(join1ValidatorAfterPoC).isNotNull
+        assertThat(join1ValidatorAfterPoC!!.status).isNotEqualTo(StakeValidatorStatus.BONDED.value)
+        Logger.info("  Join1 is jailed (confirmation_weight=3 < alpha*regular_weight=5)")
+        Logger.info("  Join1 validator status: ${join1ValidatorAfterPoC.status}")
+        
+        logSection("Waiting for NEXT epoch where confirmation weights will be applied")
+        genesis.waitForStage(EpochStage.START_OF_POC)
+        Logger.info("New epoch started, confirmation weights will be used in settlement")
+        
+        // Record balances AFTER confirmation but BEFORE settlement
+        val initialBalances = mapOf(
+            genesis.node.getColdAddress() to genesis.node.getSelfBalance(),
+            join1Address to join1.node.getSelfBalance(),
+            join2.node.getColdAddress() to join2.node.getSelfBalance()
+        )
+        
+        logSection("Waiting for reward settlement")
+        genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
+        
+        logSection("Verifying Join1 receives zero rewards (excluded from epoch)")
+        val finalBalances = mapOf(
+            genesis.node.getColdAddress() to genesis.node.getSelfBalance(),
+            join1Address to join1.node.getSelfBalance(),
+            join2.node.getColdAddress() to join2.node.getSelfBalance()
+        )
+        
+        val genesisChange = finalBalances[genesis.node.getColdAddress()]!! - initialBalances[genesis.node.getColdAddress()]!!
+        val join1Change = finalBalances[join1Address]!! - initialBalances[join1Address]!!
+        val join2Change = finalBalances[join2.node.getColdAddress()]!! - initialBalances[join2.node.getColdAddress()]!!
+        
+        Logger.info("Balance changes:")
+        Logger.info("  Genesis: $genesisChange (regular_weight=10, confirmation_weight=10)")
+        Logger.info("  Join1: $join1Change (JAILED - excluded from settlement)")
+        Logger.info("  Join2: $join2Change (regular_weight=10, confirmation_weight=10)")
+        
+        // Join1 should receive zero rewards (excluded from epoch after jailing)
+        assertThat(join1Change).isEqualTo(0L)
+        Logger.info("  Join1 received zero rewards (excluded from epoch)")
+        
+        // Genesis and Join2 should receive positive rewards
+        assertThat(genesisChange).isGreaterThan(0)
+        assertThat(join2Change).isGreaterThan(0)
+        Logger.info("  Genesis and Join2 received positive rewards")
+        
+        // Genesis and Join2 should have similar rewards (both full weight, splitting total rewards)
+        logSection("Verifying Genesis and Join2 split rewards")
+        assertThat(genesisChange).isCloseTo(join2Change, Offset.offset(10L))
+        Logger.info("  Genesis and Join2 received similar rewards: Genesis=$genesisChange, Join2=$join2Change")
+
+        logSection("TEST PASSED: Confirmation PoC correctly jails participant below alpha threshold")
+    }
+    
+    @Test
     fun `confirmation PoC with multiple MLNodes - capped rewards with POC_SLOT allocation`() {
         logSection("=== TEST: Confirmation PoC with Multiple MLNodes - POC_SLOT Allocation ===")
         
@@ -617,7 +746,8 @@ class ConfirmationPoCTests : TestermintTest() {
     // Helper functions
     
     private fun createConfirmationPoCSpec(
-        expectedConfirmationsPerEpoch: Long
+        expectedConfirmationsPerEpoch: Long,
+        alphaThreshold: Double = 0.70
     ): Spec<AppState> {
         // Configure epoch params and confirmation PoC params
         // epochLength=40 provides sufficient inference phase window for confirmation PoC trigger
@@ -633,7 +763,7 @@ class ConfirmationPoCTests : TestermintTest() {
                     }
                     this[InferenceParams::confirmationPocParams] = spec<ConfirmationPoCParams> {
                         this[ConfirmationPoCParams::expectedConfirmationsPerEpoch] = expectedConfirmationsPerEpoch
-                        this[ConfirmationPoCParams::alphaThreshold] = Decimal.fromDouble(0.70)
+                        this[ConfirmationPoCParams::alphaThreshold] = Decimal.fromDouble(alphaThreshold)
                         this[ConfirmationPoCParams::slashFraction] = Decimal.fromDouble(0.10)
                     }
                     this[InferenceParams::pocParams] = spec<PocParams> {
