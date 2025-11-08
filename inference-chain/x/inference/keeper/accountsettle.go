@@ -158,7 +158,16 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 	k.LogInfo("SettleAccounts", types.Settle, "currentEpochIndex", currentEpochIndex)
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	blockHeight := sdkCtx.BlockHeight()
-	allParticipants := k.GetAllParticipant(ctx)
+	activeParticipants, found := k.GetActiveParticipants(ctx, currentEpochIndex)
+	if !found {
+		k.LogError("Active participants not found", types.Settle, "currentEpochIndex", currentEpochIndex)
+		return nil
+	}
+	activeParticipantAddresses := make([]string, len(activeParticipants.Participants))
+	for i, participant := range activeParticipants.Participants {
+		activeParticipantAddresses[i] = participant.Index
+	}
+	allParticipants := k.GetParticipants(ctx, activeParticipantAddresses)
 
 	k.LogInfo("Block height", types.Settle, "height", blockHeight)
 	k.LogInfo("Got all participants", types.Settle, "participants", len(allParticipants))
