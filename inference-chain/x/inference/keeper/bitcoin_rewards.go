@@ -242,8 +242,8 @@ func CalculateParticipantBitcoinRewards(
 
 	for _, participant := range participants {
 		// Skip invalid participants from PoC weight calculations
-		if participant.Status == types.ParticipantStatus_INVALID {
-			logger.Info("Invalid participant found in PoC weight calculations, skipping", "participant", participant.Address)
+		if participant.Status != types.ParticipantStatus_ACTIVE {
+			logger.Info("Invalid/inactive participant found in PoC weight calculations, skipping", "participant", participant.Address)
 			participantWeights[participant.Address] = 0
 			continue
 		}
@@ -252,10 +252,6 @@ func CalculateParticipantBitcoinRewards(
 		participantWeights[participant.Address] = pocWeight
 		totalPoCWeight += pocWeight
 	}
-
-	logger.Info("Bitcoin Rewards: Checking downtime for participants", "participants", len(participants))
-	CheckAndPunishForDowntimeForParticipants(participants, participantWeights, logger)
-	logger.Info("Bitcoin Rewards: weights after downtime check", "participants", participantWeights)
 
 	// 3. Create settle results for each participant
 	settleResults := make([]*SettleResult, 0, len(participants))
@@ -275,14 +271,14 @@ func CalculateParticipantBitcoinRewards(
 
 		// Calculate WorkCoins (UNCHANGED from current system - direct user fees)
 		workCoins := uint64(0)
-		if participant.CoinBalance > 0 && participant.Status != types.ParticipantStatus_INVALID {
+		if participant.CoinBalance > 0 && participant.Status == types.ParticipantStatus_ACTIVE {
 			workCoins = uint64(participant.CoinBalance)
 		}
 		settleAmount.WorkCoins = workCoins
 
 		// Calculate RewardCoins (NEW Bitcoin-style distribution by PoC weight)
 		rewardCoins := uint64(0)
-		if participant.Status != types.ParticipantStatus_INVALID && totalPoCWeight > 0 {
+		if participant.Status == types.ParticipantStatus_ACTIVE && totalPoCWeight > 0 {
 			participantWeight := participantWeights[participant.Address]
 			if participantWeight > 0 {
 				// Use big.Int to prevent overflow with large numbers

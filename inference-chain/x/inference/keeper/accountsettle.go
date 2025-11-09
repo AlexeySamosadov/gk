@@ -208,17 +208,12 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 	k.AddTokenomicsData(ctx, &types.TokenomicsData{TotalSubsidies: uint64(rewardAmount)})
 
 	k.LogInfo("Checking downtime for participants", types.Settle, "participants", len(allParticipants))
-	for _, participant := range allParticipants {
-		k.LogDebug("Checking downtime for participant", types.Settle, "participant", participant.Address, "missed_requests", participant.CurrentEpochStats.MissedRequests, "inference_count", participant.CurrentEpochStats.InferenceCount)
-		// TODO: Check if it is better to move this function outside the settleAccounts function.
-		k.CheckAndSlashForDowntime(ctx, &participant)
-	}
 
 	for i, participant := range allParticipants {
 		// amount should have the same order as participants
 		amount := amounts[i]
 
-		if participant.Status != types.ParticipantStatus_INVALID {
+		if participant.Status == types.ParticipantStatus_ACTIVE {
 			participant.EpochsCompleted += 1
 		}
 		k.SafeLogSubAccountTransaction(ctx, types.ModuleName, participant.Address, "balance", participant.CoinBalance, "settling")
@@ -240,7 +235,7 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 		if err != nil {
 			return err
 		}
-		participant.CurrentEpochStats = &types.CurrentEpochStats{}
+		participant.CurrentEpochStats = types.NewCurrentEpochStats()
 		err := k.SetParticipant(ctx, participant)
 		if err != nil {
 			return err
@@ -310,11 +305,10 @@ func getWorkTotals(participants []types.Participant, logger log.Logger) (int64, 
 	invalidatedBalance := int64(0)
 	for _, p := range participants {
 		// Do not count invalid participants work as "work", since it should not be part of the distributions
-		if p.CoinBalance > 0 && p.Status != types.ParticipantStatus_INVALID {
-			newCoinBalance := CheckAndPunishForDowntimeForParticipant(p, uint64(p.CoinBalance), logger)
-			totalWork += int64(newCoinBalance)
+		if p.CoinBalance > 0 && p.Status == types.ParticipantStatus_ACTIVE {
+			totalWork += p.CoinBalance
 		}
-		if p.CoinBalance > 0 && p.Status == types.ParticipantStatus_INVALID {
+		if p.CoinBalance > 0 && p.Status != types.ParticipantStatus_ACTIVE {
 			invalidatedBalance += p.CoinBalance
 		}
 	}
@@ -328,20 +322,19 @@ func getSettleAmount(participant types.Participant, rewardInfo []DistributedCoin
 	if participant.CoinBalance < 0 {
 		return settle, types.ErrNegativeCoinBalance
 	}
-	if participant.Status == types.ParticipantStatus_INVALID {
+	if participant.Status != types.ParticipantStatus_ACTIVE {
 		return settle, nil
 	}
-	workCoins := int64(CheckAndPunishForDowntimeForParticipant(participant, uint64(participant.CoinBalance), logger))
 	rewardCoins := int64(0)
 	for _, distribution := range rewardInfo {
-		if participant.Status == types.ParticipantStatus_INVALID {
+		if participant.Status != types.ParticipantStatus_ACTIVE {
 			continue
 		}
-		rewardCoins += distribution.calculateDistribution(workCoins)
+		rewardCoins += distribution.calculateDistribution(participant.CoinBalance)
 	}
 	return &types.SettleAmount{
 		RewardCoins: uint64(rewardCoins),
-		WorkCoins:   uint64(workCoins),
+		WorkCoins:   uint64(participant.CoinBalance),
 		Participant: participant.Address,
 	}, nil
 }

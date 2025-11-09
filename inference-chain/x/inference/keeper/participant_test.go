@@ -22,7 +22,7 @@ func createNParticipant(keeper keeper.Keeper, ctx context.Context, n int) []type
 		items[i].Index = testutil.Bech32Addr(i)
 		// To test counter
 		items[i].Status = types.ParticipantStatus_ACTIVE
-
+		items[i].CurrentEpochStats = types.NewCurrentEpochStats()
 		keeper.SetParticipant(ctx, items[i])
 	}
 	return items

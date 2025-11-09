@@ -107,20 +107,26 @@ func DefaultEpochParams() *EpochParams {
 
 func DefaultValidationParams() *ValidationParams {
 	return &ValidationParams{
-		FalsePositiveRate:           DecimalFromFloat(0.05),
-		MinRampUpMeasurements:       10,
-		PassValue:                   DecimalFromFloat(0.99),
-		MinValidationAverage:        DecimalFromFloat(0.01),
-		MaxValidationAverage:        DecimalFromFloat(1.0),
-		ExpirationBlocks:            20,
-		EpochsToMax:                 30,
-		FullValidationTrafficCutoff: 10000,
-		MinValidationHalfway:        DecimalFromFloat(0.05),
-		MinValidationTrafficCutoff:  100,
-		MissPercentageCutoff:        DecimalFromFloat(0.01),
-		MissRequestsPenalty:         DecimalFromFloat(1.0),
-		TimestampExpiration:         60,
-		TimestampAdvance:            30,
+		FalsePositiveRate:              DecimalFromFloat(0.05),
+		MinRampUpMeasurements:          10,
+		PassValue:                      DecimalFromFloat(0.99),
+		MinValidationAverage:           DecimalFromFloat(0.01),
+		MaxValidationAverage:           DecimalFromFloat(1.0),
+		ExpirationBlocks:               20,
+		EpochsToMax:                    30,
+		FullValidationTrafficCutoff:    10000,
+		MinValidationHalfway:           DecimalFromFloat(0.05),
+		MinValidationTrafficCutoff:     100,
+		MissPercentageCutoff:           DecimalFromFloat(0.01),
+		MissRequestsPenalty:            DecimalFromFloat(1.0),
+		TimestampExpiration:            60,
+		TimestampAdvance:               30,
+		BadParticipantInvalidationRate: DecimalFromFloat(0.20),
+		InvalidationHThreshold:         DecimalFromFloat(4),
+		DowntimeBadPercentage:          DecimalFromFloat(0.20),
+		DowntimeGoodPercentage:         DecimalFromFloat(0.1),
+		DowntimeHThreshold:             DecimalFromFloat(4),
+		QuickFailureThreshold:          DecimalFromFloat(0.000001),
 	}
 }
 
@@ -761,6 +767,10 @@ func (d *Decimal) ToFloat32() float32 {
 
 func DecimalFromFloat(f float64) *Decimal {
 	d := decimal.NewFromFloat(f)
+	return &Decimal{Value: d.CoefficientInt64(), Exponent: d.Exponent()}
+}
+
+func DecimalFromDecimal(d decimal.Decimal) *Decimal {
 	return &Decimal{Value: d.CoefficientInt64(), Exponent: d.Exponent()}
 }
 

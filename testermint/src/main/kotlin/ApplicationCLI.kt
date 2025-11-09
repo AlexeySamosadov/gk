@@ -144,6 +144,10 @@ data class ApplicationCLI(
         execAndParse(listOf("query", "inference", "get-minimum-validation-average"))
     }
 
+    fun getRawParticipants(): RawParticipantWrapper = wrapLog("getRawParticipants", false) {
+        execAndParse(listOf("query", "inference", "list-participant"))
+    }
+
     fun getStatus(): NodeInfoResponse = wrapLog("getStatus", false) { execAndParse(listOf("status")) }
 
     fun getVersion(): String = wrapLog("getVersion", false) {

@@ -268,7 +268,7 @@ func TestEvenAmong3(t *testing.T) {
 	participant1 := types.Participant{
 		Address:     "participant1",
 		CoinBalance: 255000,
-		Status:      types.ParticipantStatus_RAMPING,
+		Status:      types.ParticipantStatus_ACTIVE,
 		CurrentEpochStats: &types.CurrentEpochStats{
 			InferenceCount: 100,
 			MissedRequests: 0,
@@ -286,7 +286,7 @@ func TestEvenAmong3(t *testing.T) {
 	participant3 := types.Participant{
 		Address:     "participant3",
 		CoinBalance: 255000,
-		Status:      types.ParticipantStatus_RAMPING,
+		Status:      types.ParticipantStatus_ACTIVE,
 		CurrentEpochStats: &types.CurrentEpochStats{
 			InferenceCount: 100,
 			MissedRequests: 0,

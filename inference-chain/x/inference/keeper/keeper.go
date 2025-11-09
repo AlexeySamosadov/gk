@@ -61,6 +61,7 @@ type (
 		PruningState                   collections.Item[types.PruningState]
 		InferencesToPrune              collections.Map[collections.Pair[int64, string], collections.NoValue]
 		ActiveInvalidations            collections.KeySet[collections.Pair[sdk.AccAddress, string]]
+		ExcludedParticipantsMap   collections.Map[collections.Pair[uint64, sdk.AccAddress], types.ExcludedParticipant]
 		// Bridge & Wrapped Token collections
 		BridgeContractAddresses        collections.Map[collections.Pair[string, string], types.BridgeContractAddress]
 		BridgeTransactionsMap          collections.Map[collections.Triple[string, string, string], types.BridgeTransaction]
@@ -282,6 +283,13 @@ func NewKeeper(
 			types.ActiveInvalidationsPrefix,
 			"active_invalidations",
 			collections.PairKeyCodec(sdk.AccAddressKey, collections.StringKey),
+		),
+		ExcludedParticipantsMap: collections.NewMap(
+			sb,
+			types.ExcludedParticipantsPrefix,
+			"excluded_participants",
+			collections.PairKeyCodec(collections.Uint64Key, sdk.AccAddressKey),
+			codec.CollValue[types.ExcludedParticipant](cdc),
 		),
 		BridgeContractAddresses: collections.NewMap(
 			sb,

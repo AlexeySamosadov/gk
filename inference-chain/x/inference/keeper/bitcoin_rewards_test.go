@@ -256,78 +256,6 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 		require.Equal(t, expectedEpochReward, totalDistributed, "Complete epoch reward must be distributed")
 	})
 
-	t.Run("Bitcoin reward distribution with downtime punishment", func(t *testing.T) {
-		// Create participants with high missed request rate (30 out of 130 total = 23% missed)
-		participantsWithDowntime := []types.Participant{
-			{
-				Address:     "participant1",
-				CoinBalance: 500, // WorkCoins from user fees
-				Status:      types.ParticipantStatus_ACTIVE,
-				CurrentEpochStats: &types.CurrentEpochStats{
-					InferenceCount: 100,
-					MissedRequests: 30, // 30% missed rate - should trigger punishment
-				},
-			},
-			{
-				Address:     "participant2",
-				CoinBalance: 1000, // WorkCoins from user fees
-				Status:      types.ParticipantStatus_ACTIVE,
-				CurrentEpochStats: &types.CurrentEpochStats{
-					InferenceCount: 100,
-					MissedRequests: 30, // 30% missed rate - should trigger punishment
-				},
-			},
-			{
-				Address:     "participant3",
-				CoinBalance: 750, // WorkCoins from user fees
-				Status:      types.ParticipantStatus_ACTIVE,
-				CurrentEpochStats: &types.CurrentEpochStats{
-					InferenceCount: 100,
-					MissedRequests: 2, // 2% missed rate - should not trigger punishment
-				},
-			},
-		}
-
-		logger := createTestLogger(t)
-		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(participantsWithDowntime, epochGroupData, bitcoinParams, logger)
-		require.NoError(t, err)
-		require.Equal(t, 3, len(results))
-
-		// Verify BitcoinResult
-		require.Greater(t, bitcoinResult.Amount, int64(0))
-		require.Equal(t, uint64(100), bitcoinResult.EpochNumber)
-		require.True(t, bitcoinResult.DecayApplied) // Since epoch > genesis
-
-		// Calculate expected rewards - same as before
-		expectedEpochReward := CalculateFixedEpochReward(99, 285000000000000, bitcoinParams.DecayRate)
-
-		// Verify participant1: Should get 0 rewards due to downtime punishment (>5% missed)
-		p1Result := results[0]
-		require.NoError(t, p1Result.Error)
-		require.Equal(t, "participant1", p1Result.Settle.Participant)
-		require.Equal(t, uint64(500), p1Result.Settle.WorkCoins) // WorkCoins preserved
-		require.Equal(t, uint64(0), p1Result.Settle.RewardCoins) // No rewards due to downtime
-
-		// Verify participant2: Should get 0 rewards due to downtime punishment (>5% missed)
-		p2Result := results[1]
-		require.NoError(t, p2Result.Error)
-		require.Equal(t, "participant2", p2Result.Settle.Participant)
-		require.Equal(t, uint64(1000), p2Result.Settle.WorkCoins) // WorkCoins preserved
-		require.Equal(t, uint64(0), p2Result.Settle.RewardCoins)  // No rewards due to downtime
-
-		// Verify participant3: Should get all rewards since others were punished
-		p3Result := results[2]
-		require.NoError(t, p3Result.Error)
-		require.Equal(t, "participant3", p3Result.Settle.Participant)
-		require.Equal(t, uint64(750), p3Result.Settle.WorkCoins) // WorkCoins preserved
-		// Should get the full epoch reward since other participants were punished
-		require.Equal(t, expectedEpochReward, p3Result.Settle.RewardCoins)
-
-		// Verify total rewards distributed - only participant3 gets rewards
-		totalDistributed := p1Result.Settle.RewardCoins + p2Result.Settle.RewardCoins + p3Result.Settle.RewardCoins
-		require.Equal(t, expectedEpochReward, totalDistributed, "Complete epoch reward must be distributed")
-	})
-
 	t.Run("Invalid participants get no rewards", func(t *testing.T) {
 		invalidParticipants := []types.Participant{
 			{
@@ -348,12 +276,20 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 					MissedRequests: 0,
 				},
 			},
+			{
+				Address:     "participant3",
+				CoinBalance: 750,
+				Status:      types.ParticipantStatus_INACTIVE,
+				CurrentEpochStats: &types.CurrentEpochStats{
+					InferenceCount: 100,
+				},
+			},
 		}
 
 		logger := createTestLogger(t)
 		results, bitcoinResult, err := CalculateParticipantBitcoinRewards(invalidParticipants, epochGroupData, bitcoinParams, logger)
 		require.NoError(t, err)
-		require.Equal(t, 2, len(results))
+		require.Equal(t, 3, len(results))
 
 		// Verify BitcoinResult still shows fixed epoch reward
 		require.Greater(t, bitcoinResult.Amount, int64(0))
@@ -370,6 +306,13 @@ func TestCalculateParticipantBitcoinRewards(t *testing.T) {
 		require.NoError(t, p2Result.Error)
 		require.Equal(t, uint64(1000), p2Result.Settle.WorkCoins)  // Valid participant gets WorkCoins
 		require.Greater(t, p2Result.Settle.RewardCoins, uint64(0)) // Valid participant gets all RewardCoins
+
+		// Valid participant gets all rewards (since they have all the PoC weight)
+		p3Result := results[2]
+		require.NoError(t, p3Result.Error)
+		require.Equal(t, uint64(0), p3Result.Settle.WorkCoins)   // Valid participant gets WorkCoins
+		require.Equal(t, uint64(0), p3Result.Settle.RewardCoins) // Valid participant gets all RewardCoins
+
 	})
 
 	t.Run("Negative coin balance error", func(t *testing.T) {
