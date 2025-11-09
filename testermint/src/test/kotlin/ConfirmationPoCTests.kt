@@ -660,7 +660,7 @@ class ConfirmationPoCTests : TestermintTest() {
         val numPocSlotFalse = pocSlotAllocation.count { !it.pocSlot }
 
         val expectedFinalWeight = 80L
-        val confirmedWeightPerNode = (90L - expectedFinalWeight) / numPocSlotTrue
+        val confirmedWeightPerNode = (expectedFinalWeight - 30*numPocSlotTrue) / numPocSlotFalse
 
         Logger.info("Genesis weight breakdown:")
         Logger.info("  POC_SLOT=true nodes: $numPocSlotTrue × 30 = ${numPocSlotTrue * 30}")
@@ -673,8 +673,7 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("Confirmation PoC triggered at height ${confirmationEvent!!.triggerHeight}")
 
         logSection("Setting PoC mocks for confirmation")
-        // During confirmation PoC, each POC_SLOT=false node will return weight=8 (reduced from 10)
-        Logger.info("  Genesis: each node returns weight=$confirmedWeightPerNode (reduced from 10)")
+        Logger.info("  Genesis: each node returns weight=$confirmedWeightPerNode (reduced from 30)")
         Logger.info("    - Only $numPocSlotFalse POC_SLOT=false nodes will participate in confirmation")
         Logger.info("    - Total confirmed weight: ${numPocSlotFalse * confirmedWeightPerNode}")
         Logger.info("  Join1: weight=100 per node (full confirmation)")
