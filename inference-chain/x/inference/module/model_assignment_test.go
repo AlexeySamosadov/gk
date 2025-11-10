@@ -14,6 +14,7 @@ import (
 type mockKeeperForModelAssigner struct {
 	hardwareNodes    map[string]*types.HardwareNodes
 	governanceModels []types.Model
+	epochGroupData   map[string]map[uint64]types.EpochGroupData // modelId -> epochIndex -> data
 }
 
 func (m *mockKeeperForModelAssigner) GetGovernanceModelsSorted(ctx context.Context) ([]*types.Model, error) {
@@ -31,7 +32,14 @@ func (m *mockKeeperForModelAssigner) GetActiveParticipants(ctx context.Context, 
 }
 
 func (m *mockKeeperForModelAssigner) GetEpochGroupData(ctx context.Context, epochIndex uint64, modelId string) (val types.EpochGroupData, found bool) {
-	// Not implemented for this mock - return empty data
+	if m.epochGroupData == nil {
+		return types.EpochGroupData{}, false
+	}
+	if modelData, ok := m.epochGroupData[modelId]; ok {
+		if data, ok := modelData[epochIndex]; ok {
+			return data, true
+		}
+	}
 	return types.EpochGroupData{}, false
 }
 
@@ -82,6 +90,21 @@ func TestSetModelsForParticipants_OneModelTwoNodes_Bug(t *testing.T) {
 				HardwareNodes: []*types.HardwareNode{
 					{LocalId: "mlnode1", Models: []string{modelID}},
 					{LocalId: "mlnode2", Models: []string{modelID}},
+				},
+			},
+		},
+		epochGroupData: map[string]map[uint64]types.EpochGroupData{
+			modelID: {
+				0: {
+					ValidationWeights: []*types.ValidationWeight{
+						{
+							MemberAddress: participantAddress,
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "mlnode1", PocWeight: 29},
+								{NodeId: "mlnode2", PocWeight: 28},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -197,6 +220,20 @@ func TestSetModelsForParticipants_OneNodeOneModel(t *testing.T) {
 				},
 			},
 		},
+		epochGroupData: map[string]map[uint64]types.EpochGroupData{
+			modelID: {
+				0: {
+					ValidationWeights: []*types.ValidationWeight{
+						{
+							MemberAddress: participantAddress,
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "mlnode1", PocWeight: 29},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	// Model Assigner
@@ -234,7 +271,8 @@ func TestSetModelsForParticipants_OneNodeOneModel(t *testing.T) {
 	require.Len(t, modelGroup.MlNodes, 1, "The model-specific group should have one node")
 
 	assertNodeInGroup(t, modelGroup.MlNodes, "mlnode1")
-	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, false}, 1)
+	// With weight-based allocation: 1 node (weight 29), target 50% = 14.5, so it gets allocated
+	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, true}, 1)
 }
 
 func TestSetModelsForParticipants_ManyNodesManyModels(t *testing.T) {
@@ -260,6 +298,34 @@ func TestSetModelsForParticipants_ManyNodesManyModels(t *testing.T) {
 					{LocalId: "mlnode2", Models: []string{modelA}},         // supports A
 					{LocalId: "mlnode3", Models: []string{modelB}},         // supports B
 					{LocalId: "mlnode4", Models: []string{modelA, modelB}}, // supports both
+				},
+			},
+		},
+		epochGroupData: map[string]map[uint64]types.EpochGroupData{
+			modelA: {
+				1: {
+					ValidationWeights: []*types.ValidationWeight{
+						{
+							MemberAddress: participantAddress,
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "mlnode1", PocWeight: 30},
+								{NodeId: "mlnode2", PocWeight: 25},
+								{NodeId: "mlnode4", PocWeight: 25},
+							},
+						},
+					},
+				},
+			},
+			modelB: {
+				1: {
+					ValidationWeights: []*types.ValidationWeight{
+						{
+							MemberAddress: participantAddress,
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "mlnode3", PocWeight: 20},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -314,9 +380,13 @@ func TestSetModelsForParticipants_ManyNodesManyModels(t *testing.T) {
 	require.Len(t, groupB.MlNodes, 1, "Model B group should have one node (mlnode3)")
 	assertNodeInGroup(t, groupB.MlNodes, "mlnode3")
 
-	// Check 50% allocation per group: floor(3/2)=1 inference for A; floor(1/2)=0 for B
-	assertTimeslotAllocationCount(t, groupA.MlNodes, []bool{true, true}, 1)
-	assertTimeslotAllocationCount(t, groupA.MlNodes, []bool{true, false}, 2)
-	assertTimeslotAllocationCount(t, groupB.MlNodes, []bool{true, true}, 0)
-	assertTimeslotAllocationCount(t, groupB.MlNodes, []bool{true, false}, 1)
+	// Check weight-based allocation:
+	// Model A: 3 nodes (30, 25, 25), total weight = 80, target 50% = 40
+	// Algorithm allocates smallest first: 25 + 25 = 50, so 2 nodes get POC_SLOT=true
+	// Model B: 1 node (20), total weight = 20, target 50% = 10
+	// Algorithm allocates the node (0 < 10, add 20), so 1 node gets POC_SLOT=true
+	assertTimeslotAllocationCount(t, groupA.MlNodes, []bool{true, true}, 2)
+	assertTimeslotAllocationCount(t, groupA.MlNodes, []bool{true, false}, 1)
+	assertTimeslotAllocationCount(t, groupB.MlNodes, []bool{true, true}, 1)
+	assertTimeslotAllocationCount(t, groupB.MlNodes, []bool{true, false}, 0)
 }
