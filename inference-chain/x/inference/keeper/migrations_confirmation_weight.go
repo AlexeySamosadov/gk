@@ -8,37 +8,49 @@ import (
 // MigrateConfirmationWeights initializes ConfirmationWeight for existing EpochGroupData.
 // This migration is needed for the v0.2.5 upgrade because ConfirmationWeight is a new field.
 func (k Keeper) MigrateConfirmationWeights(ctx sdk.Context) error {
-	k.Logger().Info("migration: initializing confirmation weights for existing epochs")
+	k.Logger().Info("migration: initializing confirmation weights for current epoch")
 
-	allEpochGroupData := k.GetAllEpochGroupData(ctx)
-	updatedCount := 0
-
-	for _, epochGroupData := range allEpochGroupData {
-		updated := false
-
-		for i, vw := range epochGroupData.ValidationWeights {
-			// If ConfirmationWeight is 0, initialize it from inference-serving nodes (POC_SLOT=false)
-			if vw.ConfirmationWeight == 0 {
-				confirmationWeight := calculateInferenceServingWeight(vw.MlNodes)
-				epochGroupData.ValidationWeights[i].ConfirmationWeight = confirmationWeight
-				updated = true
-
-				k.Logger().Info("migration: initialized confirmation weight",
-					"epoch", epochGroupData.EpochIndex,
-					"model", epochGroupData.ModelId,
-					"participant", vw.MemberAddress,
-					"confirmationWeight", confirmationWeight)
-			}
-		}
-
-		if updated {
-			k.SetEpochGroupData(ctx, epochGroupData)
-			updatedCount++
-		}
+	currentEpochIndex, found := k.GetEffectiveEpochIndex(ctx)
+	if !found {
+		k.Logger().Error("migration: no current epoch found, skipping")
+		return nil
 	}
 
+	updatedCount := 0
+
+	epochGroupData, found := k.GetEpochGroupData(ctx, currentEpochIndex, "")
+	if !found {
+		k.Logger().Error("migration: no epoch group data found for current epoch, skipping")
+		return nil
+	}
+
+	activeParticipants, found := k.GetActiveParticipants(ctx, currentEpochIndex)
+	if !found {
+		k.Logger().Error("migration: no active participants found for current epoch, skipping")
+		return nil
+	}
+
+	activeParticipantToConfirmationWeight := make(map[string]int64)
+	for _, participant := range activeParticipants.Participants {
+		confirmationWeight := calculateInferenceServingWeight(participant.MlNodes)
+		activeParticipantToConfirmationWeight[participant.Index] = confirmationWeight
+	}
+
+	for i := range epochGroupData.ValidationWeights {
+		confirmationWeight, ok := activeParticipantToConfirmationWeight[epochGroupData.ValidationWeights[i].MemberAddress]
+		if !ok {
+			k.Logger().Error("migration: no confirmation weight found for participant",
+				"participant", epochGroupData.ValidationWeights[i].MemberAddress)
+			continue
+		}
+		epochGroupData.ValidationWeights[i].ConfirmationWeight = confirmationWeight
+		updatedCount++
+	}
+
+	k.SetEpochGroupData(ctx, epochGroupData)
+
 	k.Logger().Info("migration: finished initializing confirmation weights",
-		"totalEpochGroupData", len(allEpochGroupData),
+		"epoch", currentEpochIndex,
 		"updated", updatedCount)
 
 	return nil
@@ -46,18 +58,24 @@ func (k Keeper) MigrateConfirmationWeights(ctx sdk.Context) error {
 
 // calculateInferenceServingWeight calculates the total weight of nodes serving inference (POC_SLOT=false).
 // This matches the logic in epochgroup.calculateInferenceServingWeight.
-func calculateInferenceServingWeight(mlNodes []*types.MLNodeInfo) int64 {
+func calculateInferenceServingWeight(mlNodes []*types.ModelMLNodes) int64 {
 	totalWeight := int64(0)
 
-	for _, node := range mlNodes {
-		if node == nil {
+	for _, modelNodes := range mlNodes {
+		if modelNodes == nil {
 			continue
 		}
 
-		// POC_SLOT is at index 1 (second timeslot)
-		// false = serves inference, true = preserved for confirmation PoC
-		if len(node.TimeslotAllocation) > 1 && !node.TimeslotAllocation[1] {
-			totalWeight += node.PocWeight
+		for _, node := range modelNodes.MlNodes {
+			if node == nil {
+				continue
+			}
+
+			// POC_SLOT is at index 1 (second timeslot)
+			// false = serves inference, true = continues inference during confirmation PoC
+			if len(node.TimeslotAllocation) > 1 && !node.TimeslotAllocation[1] {
+				totalWeight += node.PocWeight
+			}
 		}
 	}
 
