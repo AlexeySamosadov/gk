@@ -129,6 +129,7 @@ type KeeperForModelAssigner interface {
 	GetHardwareNodes(ctx context.Context, participantId string) (*types.HardwareNodes, bool)
 	GetActiveParticipants(ctx context.Context, epochId uint64) (val types.ActiveParticipants, found bool)
 	GetEpochGroupData(ctx context.Context, epochIndex uint64, modelId string) (val types.EpochGroupData, found bool)
+	GetParams(ctx context.Context) types.Params
 }
 
 func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participants []*types.ActiveParticipant, upcomingEpoch types.Epoch) {
@@ -237,8 +238,15 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoch types.Epoch, participants []*types.ActiveParticipant) {
 	ma.LogInfo("Starting ML node allocation for PoC slots", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "start", "num_participants", len(participants))
 
-	// Default allocation percentage: 50%
-	allocationPercentage := types.DecimalFromFloat(50.0)
+	// Get allocation percentage from params
+	params := ma.keeper.GetParams(ctx)
+	allocationPercentage := params.EpochParams.PocSlotAllocation
+	// If allocation is nil or 0, default to 50%
+	if allocationPercentage == nil || allocationPercentage.ToDecimal().IsZero() {
+		ma.LogInfo("PocSlotAllocation is nil or 0, using default 50%", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "default_allocation")
+		defaultAllocation := types.DecimalFromFloat(50.0)
+		allocationPercentage = defaultAllocation
+	}
 
 	// Phase 1: Build previous epoch data map
 	previousEpochData := NewPreviousEpochData()

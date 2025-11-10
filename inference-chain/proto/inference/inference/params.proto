@@ -68,6 +68,7 @@ message EpochParams {
   uint64 inference_pruning_epoch_threshold = 11;
   int64 inference_pruning_max = 12;
   int64 poc_pruning_max = 13;
+  Decimal poc_slot_allocation = 14;
 }
 
 message ValidationParams {

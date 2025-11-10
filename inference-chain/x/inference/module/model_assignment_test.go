@@ -43,6 +43,10 @@ func (m *mockKeeperForModelAssigner) GetEpochGroupData(ctx context.Context, epoc
 	return types.EpochGroupData{}, false
 }
 
+func (m *mockKeeperForModelAssigner) GetParams(ctx context.Context) types.Params {
+	return types.DefaultParams()
+}
+
 // Mock Logger
 type mockLogger struct{}
 
