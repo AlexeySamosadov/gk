@@ -724,9 +724,13 @@ func TestAllocateMLNodesForPoC_MultipleParticipantsAndAllocations(t *testing.T) 
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup mock keeper with custom allocation percentage
+			// Setup mock keeper with custom allocation fraction
 			customParams := types.DefaultParams()
-			customParams.EpochParams.PocSlotAllocation = types.DecimalFromFloat(tc.allocationPercentage)
+			// Convert percentage (0-100) to fraction (0-1)
+			customParams.EpochParams.PocSlotAllocation = &types.Decimal{
+				Value:    int64(tc.allocationPercentage * 10),
+				Exponent: -3, // e.g., 50% = 500 * 10^(-3) = 0.5
+			}
 
 			mockKeeper := &mockKeeperForModelAssigner{
 				hardwareNodes: tc.hardwareNodesMap,
@@ -1050,7 +1054,7 @@ func TestAllocateMLNodesForPoC_FairDistribution(t *testing.T) {
 		epochGroupData:   previousEpochGroupData,
 		params: &types.Params{
 			EpochParams: &types.EpochParams{
-				PocSlotAllocation: types.DecimalFromFloat(50.0),
+				PocSlotAllocation: &types.Decimal{Value: 5, Exponent: -1}, // 0.5
 			},
 		},
 	}

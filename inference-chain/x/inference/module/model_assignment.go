@@ -208,11 +208,10 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoch types.Epoch, participants []*types.ActiveParticipant) {
 	ma.LogInfo("Starting ML node allocation for PoC slots", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "start", "num_participants", len(participants))
 
-	allocationPercentage := ma.keeper.GetParams(ctx).EpochParams.PocSlotAllocation
-	if allocationPercentage == nil || allocationPercentage.ToDecimal().IsZero() {
-		ma.LogInfo("PocSlotAllocation is nil or 0, using default 50%", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "default_allocation")
-		defaultAllocation := types.DecimalFromFloat(50.0)
-		allocationPercentage = defaultAllocation
+	allocationFraction := ma.keeper.GetParams(ctx).EpochParams.PocSlotAllocation
+	if allocationFraction == nil || allocationFraction.ToDecimal().IsZero() {
+		ma.LogInfo("PocSlotAllocation is nil or 0, using default 0.5", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "default_allocation")
+		allocationFraction = &types.Decimal{Value: 5, Exponent: -1}
 	}
 
 	// Phase 1: Build previous epoch data map
@@ -259,7 +258,7 @@ func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoc
 	// Phase 4: Allocate ML nodes for PoC for each model
 	for _, modelId := range sortedModelIds {
 		ma.LogInfo("Processing model for PoC allocation", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "model_loop_start", "model_id", modelId)
-		ma.allocateMLNodePerPoCForModel(modelId, currentEpochData, eligibleNodesData, allocationPercentage)
+		ma.allocateMLNodePerPoCForModel(modelId, currentEpochData, eligibleNodesData, allocationFraction)
 	}
 }
 
@@ -367,17 +366,17 @@ func (ma *ModelAssigner) allocateMLNodePerPoCForModel(
 	modelId string,
 	currentEpochData *EpochMLNodeData,
 	eligibleNodesData *EpochMLNodeData,
-	percentage *types.Decimal,
+	fraction *types.Decimal,
 ) {
 	ma.LogInfo("Starting allocation for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "model_allocation_start", "model_id", modelId)
 
 	totalWeight := currentEpochData.GetTotalWeightForModel(modelId)
 
-	percentageDecimal := percentage.ToDecimal()
-	targetPoCWeightDecimal := percentageDecimal.Mul(decimal.NewFromInt(totalWeight)).Div(decimal.NewFromInt(100))
+	fractionDecimal := fraction.ToDecimal()
+	targetPoCWeightDecimal := fractionDecimal.Mul(decimal.NewFromInt(totalWeight))
 	targetPoCWeight := targetPoCWeightDecimal.IntPart()
 
-	ma.LogInfo("Calculated target weight for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_target_weight", "model_id", modelId, "total_weight", totalWeight, "percentage", percentageDecimal.String(), "target_weight", targetPoCWeight)
+	ma.LogInfo("Calculated target weight for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_target_weight", "model_id", modelId, "total_weight", totalWeight, "fraction", fractionDecimal.String(), "target_weight", targetPoCWeight)
 
 	// Phase B: Get eligible participants (sorted alphabetically for determinism)
 	eligibleModelNodes := eligibleNodesData.GetForModel(modelId)
