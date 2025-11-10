@@ -17,20 +17,26 @@ const (
 	SubFlowContext = "allocate_mlnodes_for_poc"
 )
 
+func sortedKeys[K ~string, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
 // EpochMLNodeData stores ML node information indexed by [modelId][participantAddress]
-// Used for tracking current, previous, and eligible ML nodes across epochs
 type EpochMLNodeData struct {
 	data map[string]map[string][]*types.MLNodeInfo
 }
 
-// NewEpochMLNodeData creates a new EpochMLNodeData instance
 func NewEpochMLNodeData() *EpochMLNodeData {
 	return &EpochMLNodeData{
 		data: make(map[string]map[string][]*types.MLNodeInfo),
 	}
 }
 
-// Set stores ML nodes for a specific model and participant
 func (e *EpochMLNodeData) Set(modelId, participantAddr string, nodes []*types.MLNodeInfo) {
 	if e.data[modelId] == nil {
 		e.data[modelId] = make(map[string][]*types.MLNodeInfo)
@@ -38,12 +44,10 @@ func (e *EpochMLNodeData) Set(modelId, participantAddr string, nodes []*types.ML
 	e.data[modelId][participantAddr] = nodes
 }
 
-// GetForModel returns all participants' nodes for a given model
 func (e *EpochMLNodeData) GetForModel(modelId string) map[string][]*types.MLNodeInfo {
 	return e.data[modelId]
 }
 
-// GetForParticipant returns nodes for a specific participant and model
 func (e *EpochMLNodeData) GetForParticipant(modelId, participantAddr string) []*types.MLNodeInfo {
 	if e.data[modelId] == nil {
 		return nil
@@ -51,65 +55,38 @@ func (e *EpochMLNodeData) GetForParticipant(modelId, participantAddr string) []*
 	return e.data[modelId][participantAddr]
 }
 
-// HasModel checks if the model exists in the data
 func (e *EpochMLNodeData) HasModel(modelId string) bool {
 	return e.data[modelId] != nil
 }
 
-// Models returns all model IDs
 func (e *EpochMLNodeData) Models() []string {
-	models := make([]string, 0, len(e.data))
-	for modelId := range e.data {
-		models = append(models, modelId)
+	return sortedKeys(e.data)
+}
+
+func (e *EpochMLNodeData) GetAllParticipantsHash() string {
+	uniqueParticipants := make(map[string]bool)
+	for _, modelData := range e.data {
+		for participantAddr := range modelData {
+			uniqueParticipants[participantAddr] = true
+		}
 	}
-	return models
+
+	sortedParticipants := sortedKeys(uniqueParticipants)
+
+	allParticipantsStr := fmt.Sprintf("%v", sortedParticipants)
+	allParticipantsHash := sha256.Sum256([]byte(allParticipantsStr))
+	return fmt.Sprintf("%x", allParticipantsHash[:8])
 }
 
-// PreviousEpochData stores ValidationWeight from previous epoch indexed by [modelId][participantAddress]
-type PreviousEpochData struct {
-	data map[string]map[string]*types.ValidationWeight
-}
-
-// NewPreviousEpochData creates a new PreviousEpochData instance
-func NewPreviousEpochData() *PreviousEpochData {
-	return &PreviousEpochData{
-		data: make(map[string]map[string]*types.ValidationWeight),
+func (e *EpochMLNodeData) GetTotalWeightForModel(modelId string) int64 {
+	var total int64
+	participantNodes := e.GetForModel(modelId)
+	for _, nodes := range participantNodes {
+		for _, node := range nodes {
+			total += node.PocWeight
+		}
 	}
-}
-
-// Set stores ValidationWeight for a specific model and participant
-func (p *PreviousEpochData) Set(modelId, participantAddr string, vw *types.ValidationWeight) {
-	if p.data[modelId] == nil {
-		p.data[modelId] = make(map[string]*types.ValidationWeight)
-	}
-	p.data[modelId][participantAddr] = vw
-}
-
-// GetForModel returns all participants' ValidationWeights for a given model
-func (p *PreviousEpochData) GetForModel(modelId string) map[string]*types.ValidationWeight {
-	return p.data[modelId]
-}
-
-// GetForParticipant returns ValidationWeight for a specific participant and model
-func (p *PreviousEpochData) GetForParticipant(modelId, participantAddr string) *types.ValidationWeight {
-	if p.data[modelId] == nil {
-		return nil
-	}
-	return p.data[modelId][participantAddr]
-}
-
-// HasModel checks if the model exists in the data
-func (p *PreviousEpochData) HasModel(modelId string) bool {
-	return p.data[modelId] != nil
-}
-
-// Models returns all model IDs
-func (p *PreviousEpochData) Models() []string {
-	models := make([]string, 0, len(p.data))
-	for modelId := range p.data {
-		models = append(models, modelId)
-	}
-	return models
+	return total
 }
 
 type ModelAssigner struct {
@@ -150,14 +127,12 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 		ma.LogInfo("Processing participant", types.EpochGroup, "flow_context", FlowContext, "step", "participant_loop_start", "participant_index", p.Index)
 		hardwareNodes, found := ma.keeper.GetHardwareNodes(ctx, p.Index)
 		if !found {
-			// No hardware nodes - just set empty arrays
 			ma.LogInfo("No hardware nodes found for participant, skipping model assignment.", types.EpochGroup, "flow_context", FlowContext, "step", "no_hardware_nodes", "participant_index", p.Index)
 			p.Models = make([]string, 0)
 			p.MlNodes = make([]*types.ModelMLNodes, 0)
 			continue
 		}
 
-		// Get the original MLNodes from the first array (index 0) - populated by task 5.8
 		var originalMLNodes []*types.MLNodeInfo
 		if len(p.MlNodes) > 0 && p.MlNodes[0] != nil {
 			originalMLNodes = p.MlNodes[0].MlNodes
@@ -171,7 +146,6 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 		}
 		ma.LogInfo("Initialized all ML nodes to PRE_POC_SLOT=true, POC_SLOT=false", types.EpochGroup, "flow_context", FlowContext, "step", "init_slots", "participant_index", p.Index)
 
-		// Track which MLNodes have been assigned
 		assignedMLNodes := make(map[string]bool)
 		var supportedModels []string
 		var newMLNodeArrays []*types.ModelMLNodes
@@ -189,7 +163,7 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 			for _, mlNode := range originalMLNodes {
 				if assignedMLNodes[mlNode.NodeId] {
 					ma.LogInfo("Skipping already assigned ML node", types.EpochGroup, "flow_context", FlowContext, "step", "node_already_assigned", "participant_index", p.Index, "model_id", model.Id, "node_id", mlNode.NodeId)
-					continue // MLNode already assigned to another model
+					continue
 				}
 
 				// Check if this MLNode supports the current governance model
@@ -211,7 +185,6 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 			}
 		}
 
-		// Add remaining unassigned MLNodes as overflow array (if any exist)
 		var unassignedMLNodes []*types.MLNodeInfo
 		for _, mlNode := range originalMLNodes {
 			if !assignedMLNodes[mlNode.NodeId] {
@@ -220,7 +193,6 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 		}
 		ma.LogInfo("Unassigned MLNodes", types.EpochGroup, "flow_context", FlowContext, "step", "unassigned_nodes", "participant_index", p.Index, "unassigned_nodes", unassignedMLNodes)
 
-		// Update participant with reorganized MLNode arrays and supported models
 		p.MlNodes = newMLNodeArrays
 		p.Models = supportedModels
 		p.Weight = RecalculateWeight(p)
@@ -233,15 +205,10 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 	ma.LogInfo("Finished PoC allocation for all participants", types.EpochGroup, "flow_context", FlowContext, "step", "end")
 }
 
-// allocateMLNodesForPoC orchestrates the allocation process for PoC slots across all participants
-// It queries previous epoch data, filters eligible nodes, and applies allocation logic
 func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoch types.Epoch, participants []*types.ActiveParticipant) {
 	ma.LogInfo("Starting ML node allocation for PoC slots", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "start", "num_participants", len(participants))
 
-	// Get allocation percentage from params
-	params := ma.keeper.GetParams(ctx)
-	allocationPercentage := params.EpochParams.PocSlotAllocation
-	// If allocation is nil or 0, default to 50%
+	allocationPercentage := ma.keeper.GetParams(ctx).EpochParams.PocSlotAllocation
 	if allocationPercentage == nil || allocationPercentage.ToDecimal().IsZero() {
 		ma.LogInfo("PocSlotAllocation is nil or 0, using default 50%", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "default_allocation")
 		defaultAllocation := types.DecimalFromFloat(50.0)
@@ -249,43 +216,35 @@ func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoc
 	}
 
 	// Phase 1: Build previous epoch data map
-	previousEpochData := NewPreviousEpochData()
+	previousEpochData := NewEpochMLNodeData()
 
-	// Collect unique model IDs
 	uniqueModels := make(map[string]bool)
 	for _, participant := range participants {
 		for _, modelId := range participant.Models {
 			uniqueModels[modelId] = true
 		}
 	}
-	ma.LogInfo("Collected unique models", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "collect_unique_models", "num_unique_models", len(uniqueModels))
+	ma.LogDebug("Collected unique models", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "collect_unique_models", "num_unique_models", len(uniqueModels))
 
-	// Sort model IDs for deterministic processing order
-	var sortedModelIds []string
-	for modelId := range uniqueModels {
-		sortedModelIds = append(sortedModelIds, modelId)
-	}
-	slices.Sort(sortedModelIds)
-
-	// Query previous epoch data for each model
+	sortedModelIds := sortedKeys(uniqueModels)
 	if upcomingEpoch.Index > 0 {
 		for _, modelId := range sortedModelIds {
 			previousEpochGroupData, found := ma.keeper.GetEpochGroupData(ctx, upcomingEpoch.Index-1, modelId)
 			if found {
 				for _, vw := range previousEpochGroupData.ValidationWeights {
-					previousEpochData.Set(modelId, vw.MemberAddress, vw)
+					// Extract and store MlNodes directly
+					previousEpochData.Set(modelId, vw.MemberAddress, vw.MlNodes)
 				}
 				ma.LogInfo("Loaded previous epoch data for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "load_prev_epoch_data", "model_id", modelId, "num_validation_weights", len(previousEpochGroupData.ValidationWeights))
 			}
 		}
 	}
 
-	// Phase 2: Build current epoch data map
 	currentEpochData := NewEpochMLNodeData()
 	for _, participant := range participants {
 		for modelIdx, modelId := range participant.Models {
 			if modelIdx >= len(participant.MlNodes) {
-				ma.LogInfo("Model index out of bounds, skipping", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "model_index_oob", "participant_index", participant.Index, "model_id", modelId, "model_idx", modelIdx)
+				ma.LogWarn("Model index out of bounds, skipping", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "model_index_oob", "participant_index", participant.Index, "model_id", modelId, "model_idx", modelIdx)
 				continue
 			}
 			currentEpochData.Set(modelId, participant.Index, participant.MlNodes[modelIdx].MlNodes)
@@ -293,68 +252,63 @@ func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoc
 	}
 	ma.LogInfo("Built current epoch data map", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "build_current_epoch_data", "num_models", len(currentEpochData.Models()))
 
-	// Phase 3: Filter eligible nodes
+	// Phase 3: Filter eligible nodes for all models
 	eligibleNodesData := ma.filterEligibleMLNodes(upcomingEpoch, previousEpochData, currentEpochData)
 	ma.LogInfo("Filtered eligible nodes for all models", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "filter_all_eligible", "num_models", len(eligibleNodesData.Models()))
 
-	// Phase 4: Loop by model and allocate (using sorted model IDs for determinism)
+	// Phase 4: Allocate ML nodes for PoC for each model
 	for _, modelId := range sortedModelIds {
 		ma.LogInfo("Processing model for PoC allocation", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "model_loop_start", "model_id", modelId)
 		ma.allocateMLNodePerPoCForModel(modelId, currentEpochData, eligibleNodesData, allocationPercentage)
 	}
-
-	ma.LogInfo("Finished ML node allocation for all participants", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "end")
 }
 
-// filterEligibleMLNodes filters which nodes are eligible for allocation across all models and participants
-// Each node has 50% probability of being eligible (deterministic per epoch/participant/model)
+// filterEligibleMLNodes filters which nodes are eligible for allocation across all models
+// First filters out nodes with weight > 90th percentile, then selects N/2 + 1 participants deterministically per model
 func (ma *ModelAssigner) filterEligibleMLNodes(
 	upcomingEpoch types.Epoch,
-	previousEpochData *PreviousEpochData,
+	previousEpochData *EpochMLNodeData,
 	currentEpochData *EpochMLNodeData,
 ) *EpochMLNodeData {
-	ma.LogInfo("Starting eligible node filtering", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "filter_start")
-
-	// Create filtered data
+	allParticipantsHashStr := currentEpochData.GetAllParticipantsHash()
 	eligibleNodesData := NewEpochMLNodeData()
 
-	// Process each model
+	// Step 1: Collect all ML node weights across all models (deterministically)
+	var allWeights []int64
 	for _, modelId := range currentEpochData.Models() {
 		participantNodes := currentEpochData.GetForModel(modelId)
-
-		// Get all participant addresses for this model and sort them for determinism
-		var allParticipants []string
-		for participantAddr := range participantNodes {
-			allParticipants = append(allParticipants, participantAddr)
-		}
-		slices.Sort(allParticipants)
-
-		// Create hash of all participants for reproducibility
-		allParticipantsStr := fmt.Sprintf("%v", allParticipants)
-		allParticipantsHash := sha256.Sum256([]byte(allParticipantsStr))
-		allParticipantsHashStr := fmt.Sprintf("%x", allParticipantsHash[:8])
-
-		ma.LogInfo("Generated participants hash for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "participants_hash", "model_id", modelId, "num_participants", len(allParticipants), "participants_hash", allParticipantsHashStr)
-
 		// Sort participant addresses for deterministic iteration
-		var sortedParticipantAddrs []string
-		for participantAddr := range participantNodes {
-			sortedParticipantAddrs = append(sortedParticipantAddrs, participantAddr)
-		}
-		slices.Sort(sortedParticipantAddrs)
-
-		// Process each participant for this model in sorted order
+		sortedParticipantAddrs := sortedKeys(participantNodes)
 		for _, participantAddr := range sortedParticipantAddrs {
-			currentNodes := participantNodes[participantAddr]
-			// Get previous epoch ValidationWeight (if exists)
+			nodes := participantNodes[participantAddr]
+			for _, node := range nodes {
+				allWeights = append(allWeights, node.PocWeight)
+			}
+		}
+	}
+
+	// Step 2: Calculate outlier threshold using IQR method
+	weightThreshold := calculateWeightThreshold(allWeights)
+	ma.LogInfo("Calculated weight threshold for eligibility using IQR", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_weight_threshold", "threshold", weightThreshold, "total_nodes", len(allWeights))
+
+	for _, modelId := range currentEpochData.Models() {
+		participantNodes := currentEpochData.GetForModel(modelId)
+		sortedParticipantAddrs := sortedKeys(participantNodes)
+
+		// Filter participants with previous epoch data
+		var participantsWithHistory []string
+		for _, participantAddr := range sortedParticipantAddrs {
 			previousValidationWeight := previousEpochData.GetForParticipant(modelId, participantAddr)
 
 			// Handle first epoch and missing previous epoch data
 			if previousValidationWeight == nil {
-				// First epoch: all nodes are eligible (no history to filter on)
+				currentNodes := participantNodes[participantAddr]
+				// Filter out nodes above weight threshold
+				filteredNodes := filterNodesByWeight(currentNodes, weightThreshold)
+				// First epoch: all nodes (that pass weight filter) are eligible
 				if upcomingEpoch.Index == 0 {
-					eligibleNodesData.Set(modelId, participantAddr, currentNodes)
-					ma.LogInfo("First epoch: all nodes eligible", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "first_epoch_all_eligible", "participant_index", participantAddr, "model_id", modelId, "num_nodes", len(currentNodes))
+					eligibleNodesData.Set(modelId, participantAddr, filteredNodes)
+					ma.LogInfo("First epoch: nodes eligible after weight filter", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "first_epoch_all_eligible", "participant_index", participantAddr, "model_id", modelId, "original_nodes", len(currentNodes), "filtered_nodes", len(filteredNodes))
 					continue
 				}
 				// Later epochs: require previous participation
@@ -363,32 +317,48 @@ func (ma *ModelAssigner) filterEligibleMLNodes(
 				continue
 			}
 
-			// Create deterministic random seed from epoch, all participants hash, specific participant, and model
-			seed := fmt.Sprintf("filter_%d_%s_%s_%s", upcomingEpoch.Index, allParticipantsHashStr, participantAddr, modelId)
+			participantsWithHistory = append(participantsWithHistory, participantAddr)
+		}
+
+		// Shuffle and select N/2 + 1 participants to be eligible
+		if len(participantsWithHistory) > 0 && upcomingEpoch.Index > 0 {
+			// Create deterministic seed for shuffling participants for this model
+			seed := fmt.Sprintf("filter_%d_%s_%s", upcomingEpoch.Index, allParticipantsHashStr, modelId)
 			hash := sha256.Sum256([]byte(seed))
 			seedInt := int64(binary.BigEndian.Uint64(hash[:8]))
 			rng := rand.New(rand.NewSource(seedInt))
 
-			ma.LogInfo("Generated deterministic seed for eligibility filtering", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "generate_filter_seed", "participant_index", participantAddr, "model_id", modelId, "seed_string", seed, "seed_int", seedInt)
+			ma.LogInfo("Generated deterministic seed for participant selection", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "generate_filter_seed", "model_id", modelId, "seed_string", seed, "seed_int", seedInt)
 
-			// Filter nodes: each node has 50% probability of being eligible
-			var eligibleNodes []*types.MLNodeInfo
-			for _, node := range currentNodes {
-				// Deterministic 50% selection using RNG
-				if rng.Intn(2) == 0 {
-					eligibleNodes = append(eligibleNodes, node)
-					ma.LogInfo("Node marked as eligible", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "node_eligible", "participant_index", participantAddr, "model_id", modelId, "node_id", node.NodeId)
-				} else {
-					ma.LogInfo("Node marked as ineligible", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "node_ineligible", "participant_index", participantAddr, "model_id", modelId, "node_id", node.NodeId)
-				}
+			shuffledParticipants := make([]string, len(participantsWithHistory))
+			copy(shuffledParticipants, participantsWithHistory)
+			rng.Shuffle(len(shuffledParticipants), func(i, j int) {
+				shuffledParticipants[i], shuffledParticipants[j] = shuffledParticipants[j], shuffledParticipants[i]
+			})
+
+			numEligible := min(len(sortedParticipantAddrs)/2+1, len(shuffledParticipants))
+			eligibleParticipants := make(map[string]bool)
+			for i := 0; i < numEligible && i < len(shuffledParticipants); i++ {
+				eligibleParticipants[shuffledParticipants[i]] = true
 			}
 
-			eligibleNodesData.Set(modelId, participantAddr, eligibleNodes)
-			ma.LogInfo("Filtered eligible nodes for participant-model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "participant_filter_complete", "participant_index", participantAddr, "model_id", modelId, "total_nodes", len(currentNodes), "eligible_nodes", len(eligibleNodes))
+			ma.LogInfo("Selected eligible participants", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "select_eligible_participants", "model_id", modelId, "total_participants", len(participantsWithHistory), "eligible_participants", numEligible)
+
+			for _, participantAddr := range participantsWithHistory {
+				currentNodes := participantNodes[participantAddr]
+				if eligibleParticipants[participantAddr] {
+					// Filter out nodes above weight threshold
+					filteredNodes := filterNodesByWeight(currentNodes, weightThreshold)
+					eligibleNodesData.Set(modelId, participantAddr, filteredNodes)
+					ma.LogInfo("Participant eligible: nodes included after weight filter", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "participant_eligible", "participant_index", participantAddr, "model_id", modelId, "original_nodes", len(currentNodes), "filtered_nodes", len(filteredNodes))
+				} else {
+					eligibleNodesData.Set(modelId, participantAddr, []*types.MLNodeInfo{})
+					ma.LogInfo("Participant ineligible: no nodes included", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "participant_ineligible", "participant_index", participantAddr, "model_id", modelId)
+				}
+			}
 		}
 	}
 
-	ma.LogInfo("Finished eligible node filtering", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "filter_end", "num_models", len(eligibleNodesData.Models()))
 	return eligibleNodesData
 }
 
@@ -401,23 +371,7 @@ func (ma *ModelAssigner) allocateMLNodePerPoCForModel(
 ) {
 	ma.LogInfo("Starting allocation for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "model_allocation_start", "model_id", modelId)
 
-	// Phase A: Calculate total weight from current epoch data
-	var totalWeight int64
-	currentModelNodes := currentEpochData.GetForModel(modelId)
-
-	// Sort participant addresses for deterministic iteration
-	var participantAddrs []string
-	for participantAddr := range currentModelNodes {
-		participantAddrs = append(participantAddrs, participantAddr)
-	}
-	slices.Sort(participantAddrs)
-
-	for _, participantAddr := range participantAddrs {
-		nodes := currentModelNodes[participantAddr]
-		for _, node := range nodes {
-			totalWeight += node.PocWeight
-		}
-	}
+	totalWeight := currentEpochData.GetTotalWeightForModel(modelId)
 
 	percentageDecimal := percentage.ToDecimal()
 	targetPoCWeightDecimal := percentageDecimal.Mul(decimal.NewFromInt(totalWeight)).Div(decimal.NewFromInt(100))
@@ -425,55 +379,13 @@ func (ma *ModelAssigner) allocateMLNodePerPoCForModel(
 
 	ma.LogInfo("Calculated target weight for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_target_weight", "model_id", modelId, "total_weight", totalWeight, "percentage", percentageDecimal.String(), "target_weight", targetPoCWeight)
 
-	// Phase B: Build sorted participant list
-	type participantWeight struct {
-		address     string
-		totalWeight int64
-	}
-
-	var participantWeights []participantWeight
+	// Phase B: Get eligible participants (sorted alphabetically for determinism)
 	eligibleModelNodes := eligibleNodesData.GetForModel(modelId)
+	eligibleParticipantAddrs := sortedKeys(eligibleModelNodes)
 
-	// Collect and sort participant addresses for determinism
-	var eligibleParticipantAddrs []string
-	for participantAddr := range eligibleModelNodes {
-		eligibleParticipantAddrs = append(eligibleParticipantAddrs, participantAddr)
-	}
-	slices.Sort(eligibleParticipantAddrs)
+	ma.LogInfo("Built participant list", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "build_participants", "model_id", modelId, "num_participants", len(eligibleParticipantAddrs))
 
-	// Iterate in sorted order
-	for _, participantAddr := range eligibleParticipantAddrs {
-		nodes := eligibleModelNodes[participantAddr]
-		var weight int64
-		for _, node := range nodes {
-			weight += node.PocWeight
-		}
-		participantWeights = append(participantWeights, participantWeight{
-			address:     participantAddr,
-			totalWeight: weight,
-		})
-	}
-
-	// Sort by total weight ascending, then by participant address for determinism
-	slices.SortFunc(participantWeights, func(a, b participantWeight) int {
-		if a.totalWeight != b.totalWeight {
-			if a.totalWeight < b.totalWeight {
-				return -1
-			}
-			return 1
-		}
-		if a.address < b.address {
-			return -1
-		}
-		if a.address > b.address {
-			return 1
-		}
-		return 0
-	})
-
-	ma.LogInfo("Built sorted participant list", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "build_sorted_participants", "model_id", modelId, "num_participants", len(participantWeights))
-
-	if len(participantWeights) == 0 {
+	if len(eligibleParticipantAddrs) == 0 {
 		ma.LogInfo("No participants with eligible nodes for this model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "no_participants", "model_id", modelId)
 		return
 	}
@@ -484,14 +396,14 @@ func (ma *ModelAssigner) allocateMLNodePerPoCForModel(
 	allocatedInRound := false
 
 	for currentWeight < targetPoCWeight {
-		participant := participantWeights[currentParticipantIdx]
-		nodes := eligibleNodesData.GetForParticipant(modelId, participant.address)
+		participantAddr := eligibleParticipantAddrs[currentParticipantIdx]
+		nodes := eligibleNodesData.GetForParticipant(modelId, participantAddr)
 
 		nextMLNode := getSmallestMLNodeWithPOCSLotFalse(nodes)
 
 		if nextMLNode == nil {
 			// No eligible nodes for this participant, try next
-			currentParticipantIdx = (currentParticipantIdx + 1) % len(participantWeights)
+			currentParticipantIdx = (currentParticipantIdx + 1) % len(eligibleParticipantAddrs)
 
 			// Check if we completed full round without allocation
 			if currentParticipantIdx == 0 {
@@ -509,9 +421,9 @@ func (ma *ModelAssigner) allocateMLNodePerPoCForModel(
 		currentWeight += nextMLNode.PocWeight
 		allocatedInRound = true
 
-		ma.LogInfo("Allocated node to PoC slot", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "allocate_node", "model_id", modelId, "participant", participant.address, "node_id", nextMLNode.NodeId, "node_weight", nextMLNode.PocWeight, "current_weight", currentWeight, "target_weight", targetPoCWeight)
+		ma.LogInfo("Allocated node to PoC slot", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "allocate_node", "model_id", modelId, "participant", participantAddr, "node_id", nextMLNode.NodeId, "node_weight", nextMLNode.PocWeight, "current_weight", currentWeight, "target_weight", targetPoCWeight)
 
-		currentParticipantIdx = (currentParticipantIdx + 1) % len(participantWeights)
+		currentParticipantIdx = (currentParticipantIdx + 1) % len(eligibleParticipantAddrs)
 
 		if currentParticipantIdx == 0 {
 			allocatedInRound = false
@@ -519,8 +431,8 @@ func (ma *ModelAssigner) allocateMLNodePerPoCForModel(
 	}
 
 	// Phase D: Log allocation summary per participant
-	for _, pw := range participantWeights {
-		nodes := eligibleNodesData.GetForParticipant(modelId, pw.address)
+	for _, participantAddr := range eligibleParticipantAddrs {
+		nodes := eligibleNodesData.GetForParticipant(modelId, participantAddr)
 		var allocatedCount int
 		var allocatedWeight int64
 		var allocatedNodeIds []string
@@ -533,7 +445,7 @@ func (ma *ModelAssigner) allocateMLNodePerPoCForModel(
 			}
 		}
 
-		ma.LogInfo("Participant allocation summary", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "participant_summary", "model_id", modelId, "participant", pw.address, "total_nodes", len(nodes), "allocated_nodes", allocatedCount, "allocated_weight", allocatedWeight, "allocated_node_ids", allocatedNodeIds)
+		ma.LogInfo("Participant allocation summary", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "participant_summary", "model_id", modelId, "participant", participantAddr, "total_nodes", len(nodes), "allocated_nodes", allocatedCount, "allocated_weight", allocatedWeight, "allocated_node_ids", allocatedNodeIds)
 	}
 
 	ma.LogInfo("Finished allocation for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "model_allocation_end", "model_id", modelId, "achieved_weight", currentWeight, "target_weight", targetPoCWeight, "total_weight", totalWeight)
@@ -551,6 +463,59 @@ func getSmallestMLNodeWithPOCSLotFalse(nodes []*types.MLNodeInfo) *types.MLNodeI
 		}
 	}
 	return smallest
+}
+
+// calculateWeightThreshold calculates outlier threshold using IQR (Interquartile Range) method
+// Returns Q3 + 1.5*IQR, filtering nodes with anomalously high weights
+// Uses pure integer arithmetic for blockchain determinism
+func calculateWeightThreshold(weights []int64) int64 {
+	if len(weights) == 0 {
+		return 0
+	}
+
+	if len(weights) == 1 {
+		return weights[0]
+	}
+
+	// Sort weights for quartile calculation
+	sortedWeights := make([]int64, len(weights))
+	copy(sortedWeights, weights)
+	slices.Sort(sortedWeights)
+
+	n := len(sortedWeights)
+
+	// Calculate Q1 (25th percentile) and Q3 (75th percentile)
+	// Using integer division - deterministic across all nodes
+	q1Index := n / 4
+	q3Index := (n * 3) / 4
+
+	// Ensure indices are within bounds
+	if q3Index >= n {
+		q3Index = n - 1
+	}
+
+	q1 := sortedWeights[q1Index]
+	q3 := sortedWeights[q3Index]
+
+	// Calculate IQR (Interquartile Range)
+	iqr := q3 - q1
+
+	// Threshold = Q3 + 1.5*IQR (standard outlier detection)
+	// Using integer math: 1.5*IQR = IQR + IQR/2
+	threshold := q3 + iqr + (iqr / 2)
+
+	return threshold
+}
+
+// filterNodesByWeight filters out nodes with weight greater than threshold
+func filterNodesByWeight(nodes []*types.MLNodeInfo, threshold int64) []*types.MLNodeInfo {
+	filtered := make([]*types.MLNodeInfo, 0, len(nodes))
+	for _, node := range nodes {
+		if node.PocWeight <= threshold {
+			filtered = append(filtered, node)
+		}
+	}
+	return filtered
 }
 
 // Helper function to create a map of modelId to supported models
