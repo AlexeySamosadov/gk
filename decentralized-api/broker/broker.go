@@ -515,7 +515,7 @@ func (b *Broker) nodeAvailable(node *NodeWithState, neededModel string, currentE
 	}
 	logging.Info("nodeAvailable. Node is not administratively enabled", types.Nodes, "nodeId", node.Node.Id, "adminState", node.State.AdminState)
 
-	_, found := node.Node.Models[neededModel]
+	_, found := node.State.EpochModels[neededModel]
 	if !found {
 		logging.Info("Node does not have neededModel", types.Nodes, "node_id", node.Node.Id, "neededModel", neededModel)
 		return false, fmt.Sprintf("Node does not have model %s", neededModel)
