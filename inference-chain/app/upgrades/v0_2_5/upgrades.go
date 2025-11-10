@@ -27,12 +27,16 @@ func CreateUpgradeHandler(
 		}
 
 		err := setNewInvalidationParams(ctx, k, fromVM)
+		if err != nil {
+			return nil, err
+		}
+
 		sdkCtx := sdk.UnwrapSDKContext(ctx)
 		if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
 			k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
 		}
 
-		// Run default module migrations.
+		// Run default module migrations (includes confirmation weight initialization).
 		toVM, err := mm.RunMigrations(ctx, configurator, fromVM)
 		if err != nil {
 			return toVM, err

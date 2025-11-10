@@ -71,7 +71,11 @@ func (app *App) registerMigrations() {
 	})
 
 	app.Configurator().RegisterMigration(inferencetypes.ModuleName, 8, func(ctx sdk.Context) error {
-		return app.InferenceKeeper.MigrateLegacyBridgeState(ctx)
+		// v0.2.5 upgrade migrations
+		if err := app.InferenceKeeper.MigrateLegacyBridgeState(ctx); err != nil {
+			return err
+		}
+		return app.InferenceKeeper.MigrateConfirmationWeights(ctx)
 	})
 
 	app.Configurator().RegisterMigration(districutiontypes.ModuleName, 3, func(ctx sdk.Context) error {
