@@ -467,7 +467,11 @@ func (am AppModule) checkConfirmationSlashing(
 				"address", address)
 			continue
 		}
-		participant.CurrentEpochStats.ConfirmationPoCRatio = types.DecimalFromDecimal(decimal.NewFromInt(confirmationWeight).Div(decimal.NewFromInt(notPreservedTotalWeightValue)))
+		if notPreservedTotalWeightValue == 0 {
+			participant.CurrentEpochStats.ConfirmationPoCRatio = types.DecimalFromDecimal(decimal.NewFromInt(1))
+		} else {
+			participant.CurrentEpochStats.ConfirmationPoCRatio = types.DecimalFromDecimal(decimal.NewFromInt(confirmationWeight).Div(decimal.NewFromInt(notPreservedTotalWeightValue)))
+		}
 		am.keeper.SetParticipant(ctx, participant)
 	}
 	return nil

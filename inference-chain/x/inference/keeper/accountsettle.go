@@ -402,6 +402,9 @@ func (rc *DistributedCoinInfo) calculateDistribution(participantWorkDone int64) 
 	if participantWorkDone == 0 {
 		return 0
 	}
+	if rc.totalWork == 0 {
+		return 0
+	}
 	wd := decimal.NewFromInt(participantWorkDone)
 	tw := decimal.NewFromInt(rc.totalWork)
 	tr := decimal.NewFromInt(rc.totalRewardCoin)
