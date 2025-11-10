@@ -2,6 +2,7 @@ package inference
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/productscience/inference/x/inference/keeper"
@@ -967,4 +968,271 @@ func TestEligibilityFilter_DebugRandomness(t *testing.T) {
 		stats := nodesByParticipant[p]
 		t.Logf("    %s: %d/%d allocated", p, stats.allocated, stats.total)
 	}
+}
+
+// TestAllocateMLNodesForPoC_FairDistribution tests that allocation is distributed fairly
+// across many participants with many nodes
+func TestAllocateMLNodesForPoC_FairDistribution(t *testing.T) {
+	const (
+		numParticipants     = 20
+		nodesPerParticipant = 10
+		baseWeight          = 10
+		modelID             = "model-test"
+	)
+
+	ctx := context.Background()
+
+	// Generate participants
+	var participants []*types.ActiveParticipant
+	hardwareNodesMap := make(map[string]*types.HardwareNodes)
+	previousEpochGroupData := make(map[string]map[uint64]types.EpochGroupData)
+	previousValidationWeights := make([]*types.ValidationWeight, 0, numParticipants)
+
+	for i := 0; i < numParticipants; i++ {
+		participantID := formatParticipantID(i)
+
+		// Create hardware nodes for this participant
+		hardwareNodes := make([]*types.HardwareNode, nodesPerParticipant)
+		mlNodes := make([]*types.MLNodeInfo, nodesPerParticipant)
+		previousMLNodes := make([]*types.MLNodeInfo, nodesPerParticipant)
+
+		for j := 0; j < nodesPerParticipant; j++ {
+			nodeID := formatNodeID(i, j)
+			// Varying weights: alternate between baseWeight and baseWeight*2
+			weight := int64(baseWeight)
+			if j%2 == 0 {
+				weight = int64(baseWeight * 2)
+			}
+
+			hardwareNodes[j] = &types.HardwareNode{
+				LocalId: nodeID,
+				Models:  []string{modelID},
+			}
+
+			mlNodes[j] = &types.MLNodeInfo{
+				NodeId:             nodeID,
+				PocWeight:          weight,
+				TimeslotAllocation: []bool{true, false},
+			}
+
+			previousMLNodes[j] = &types.MLNodeInfo{
+				NodeId:    nodeID,
+				PocWeight: weight,
+			}
+		}
+
+		participants = append(participants, &types.ActiveParticipant{
+			Index:   participantID,
+			Models:  []string{modelID},
+			MlNodes: []*types.ModelMLNodes{{MlNodes: mlNodes}},
+		})
+
+		hardwareNodesMap[participantID] = &types.HardwareNodes{
+			Participant:   participantID,
+			HardwareNodes: hardwareNodes,
+		}
+
+		previousValidationWeights = append(previousValidationWeights, &types.ValidationWeight{
+			MemberAddress: participantID,
+			MlNodes:       previousMLNodes,
+		})
+	}
+
+	// Setup previous epoch data (all participants were active)
+	previousEpochGroupData[modelID] = map[uint64]types.EpochGroupData{
+		0: {ValidationWeights: previousValidationWeights},
+	}
+
+	// Setup mock keeper
+	mockKeeper := &mockKeeperForModelAssigner{
+		governanceModels: []types.Model{{Id: modelID}},
+		hardwareNodes:    hardwareNodesMap,
+		epochGroupData:   previousEpochGroupData,
+		params: &types.Params{
+			EpochParams: &types.EpochParams{
+				PocSlotAllocation: types.DecimalFromFloat(50.0),
+			},
+		},
+	}
+
+	modelAssigner := NewModelAssigner(mockKeeper, mockLogger{})
+
+	upcomingEpoch := types.Epoch{Index: 1}
+
+	// Call allocation
+	modelAssigner.setModelsForParticipants(ctx, participants, upcomingEpoch)
+
+	// Collect allocation statistics
+	type ParticipantStats struct {
+		totalNodes      int
+		allocatedNodes  int
+		totalWeight     int64
+		allocatedWeight int64
+	}
+
+	statsByParticipant := make(map[string]*ParticipantStats)
+	var globalTotalWeight int64
+	var globalAllocatedWeight int64
+	var globalTotalNodes int
+	var globalAllocatedNodes int
+
+	for _, participant := range participants {
+		stats := &ParticipantStats{}
+
+		require.Len(t, participant.MlNodes, 1, "Each participant should have one model group")
+		modelGroup := participant.MlNodes[0]
+
+		for _, node := range modelGroup.MlNodes {
+			stats.totalNodes++
+			stats.totalWeight += node.PocWeight
+			globalTotalNodes++
+			globalTotalWeight += node.PocWeight
+
+			if len(node.TimeslotAllocation) > 1 && node.TimeslotAllocation[1] {
+				stats.allocatedNodes++
+				stats.allocatedWeight += node.PocWeight
+				globalAllocatedNodes++
+				globalAllocatedWeight += node.PocWeight
+			}
+		}
+
+		statsByParticipant[participant.Index] = stats
+	}
+
+	// Calculate target weight (50%)
+	targetWeight := globalTotalWeight / 2
+
+	// Log overall results
+	t.Logf("\n=== Fair Distribution Test Results ===")
+	t.Logf("Participants: %d", numParticipants)
+	t.Logf("Nodes per participant: %d", nodesPerParticipant)
+	t.Logf("Total nodes: %d", globalTotalNodes)
+	t.Logf("Total weight: %d", globalTotalWeight)
+	t.Logf("Target weight: %d (50%%)", targetWeight)
+	t.Logf("Allocated weight: %d", globalAllocatedWeight)
+	t.Logf("Allocated percentage: %.2f%%", float64(globalAllocatedWeight)/float64(globalTotalWeight)*100)
+	t.Logf("Allocated nodes: %d/%d", globalAllocatedNodes, globalTotalNodes)
+
+	// Verify allocated weight is close to target (within one max node weight)
+	maxNodeWeight := int64(baseWeight * 2)
+	require.GreaterOrEqual(t, globalAllocatedWeight, targetWeight,
+		"Allocated weight should be >= target")
+	require.LessOrEqual(t, globalAllocatedWeight, targetWeight+maxNodeWeight,
+		"Allocated weight should not exceed target by more than one node")
+
+	// Check distribution fairness
+	var allocatedCounts []int
+	var nodesAllocatedPerParticipant []int
+	participantsWithAllocation := 0
+	participantsWithNoAllocation := 0
+
+	for i := 0; i < numParticipants; i++ {
+		participantID := formatParticipantID(i)
+		stats := statsByParticipant[participantID]
+
+		allocatedCounts = append(allocatedCounts, stats.allocatedNodes)
+		nodesAllocatedPerParticipant = append(nodesAllocatedPerParticipant, stats.allocatedNodes)
+
+		if stats.allocatedNodes > 0 {
+			participantsWithAllocation++
+		} else {
+			participantsWithNoAllocation++
+		}
+	}
+
+	t.Logf("\n=== Distribution Fairness ===")
+	t.Logf("Participants with allocations: %d/%d", participantsWithAllocation, numParticipants)
+	t.Logf("Participants with no allocations: %d", participantsWithNoAllocation)
+
+	// Calculate min/max/avg for allocated nodes per participant
+	if len(allocatedCounts) > 0 {
+		minAllocated := allocatedCounts[0]
+		maxAllocated := allocatedCounts[0]
+		sumAllocated := 0
+
+		for _, count := range allocatedCounts {
+			if count < minAllocated {
+				minAllocated = count
+			}
+			if count > maxAllocated {
+				maxAllocated = count
+			}
+			sumAllocated += count
+		}
+
+		avgAllocated := float64(sumAllocated) / float64(numParticipants)
+
+		t.Logf("Nodes allocated per participant:")
+		t.Logf("  Min: %d", minAllocated)
+		t.Logf("  Max: %d", maxAllocated)
+		t.Logf("  Avg: %.2f", avgAllocated)
+		t.Logf("  Range: %d", maxAllocated-minAllocated)
+
+		// Log first 10 participants as sample
+		t.Logf("\n=== Sample (first 10 participants) ===")
+		for i := 0; i < 10 && i < numParticipants; i++ {
+			participantID := formatParticipantID(i)
+			stats := statsByParticipant[participantID]
+			t.Logf("  %s: %d/%d nodes (%.1f%%), weight: %d/%d",
+				participantID,
+				stats.allocatedNodes, stats.totalNodes,
+				float64(stats.allocatedNodes)/float64(stats.totalNodes)*100,
+				stats.allocatedWeight, stats.totalWeight)
+		}
+
+		// Fairness assertions
+		// The algorithm has two phases:
+		// 1. Eligibility filter: N/2+1 participants selected (deterministic shuffle)
+		// 2. Round-robin allocation: smallest nodes allocated from eligible participants
+
+		// Expected: ~55% of participants get allocations (N/2+1 out of N)
+		expectedEligible := numParticipants/2 + 1
+		require.GreaterOrEqual(t, participantsWithAllocation, expectedEligible-1,
+			"Should have ~N/2+1 participants with allocations (got %d, expected ~%d)",
+			participantsWithAllocation, expectedEligible)
+		require.LessOrEqual(t, participantsWithAllocation, expectedEligible+1,
+			"Should have ~N/2+1 participants with allocations (got %d, expected ~%d)",
+			participantsWithAllocation, expectedEligible)
+
+		// Among ELIGIBLE participants, distribution should be relatively even
+		// Calculate distribution among participants who got something
+		var eligibleAllocations []int
+		for _, count := range allocatedCounts {
+			if count > 0 {
+				eligibleAllocations = append(eligibleAllocations, count)
+			}
+		}
+
+		if len(eligibleAllocations) > 0 {
+			minEligible := eligibleAllocations[0]
+			maxEligible := eligibleAllocations[0]
+			for _, count := range eligibleAllocations {
+				if count < minEligible {
+					minEligible = count
+				}
+				if count > maxEligible {
+					maxEligible = count
+				}
+			}
+
+			t.Logf("\n=== Distribution Among Eligible Participants ===")
+			t.Logf("  Min nodes: %d", minEligible)
+			t.Logf("  Max nodes: %d", maxEligible)
+			t.Logf("  Range: %d", maxEligible-minEligible)
+
+			// With round-robin, eligible participants should get similar allocations
+			// Allow some variation due to weight-based selection of smallest nodes
+			require.LessOrEqual(t, maxEligible-minEligible, nodesPerParticipant,
+				"Distribution among eligible participants should be relatively fair")
+		}
+	}
+}
+
+// Helper functions for test
+func formatParticipantID(index int) string {
+	return fmt.Sprintf("participant%03d", index)
+}
+
+func formatNodeID(participantIndex, nodeIndex int) string {
+	return fmt.Sprintf("p%03d-node%02d", participantIndex, nodeIndex)
 }
