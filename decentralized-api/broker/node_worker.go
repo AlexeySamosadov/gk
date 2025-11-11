@@ -52,13 +52,13 @@ func NewNodeWorkerWithClient(nodeId string, node *NodeWithState, client mlnodecl
 func (w *NodeWorker) addWait(reason string) {
 	w.wg.Add(1)
 	w.waitCount++
-	logging.Info("NodeWorker.addWait", types.Nodes, "node_id", w.nodeId, "waitCount", w.waitCount, "reason", reason)
+	logging.Debug("NodeWorker.addWait", types.Nodes, "node_id", w.nodeId, "waitCount", w.waitCount, "reason", reason)
 }
 
 func (w *NodeWorker) removeWait() {
 	w.wg.Done()
 	w.waitCount--
-	logging.Info("NodeWorker.removeWait", types.Nodes, "node_id", w.nodeId, "waitCount", w.waitCount)
+	logging.Debug("NodeWorker.removeWait", types.Nodes, "node_id", w.nodeId, "waitCount", w.waitCount)
 }
 
 // run is the main event loop for the worker
@@ -108,7 +108,7 @@ func (w *NodeWorker) Submit(ctx context.Context, cmd NodeWorkerCommand) bool {
 // Shutdown gracefully stops the worker
 func (w *NodeWorker) Shutdown() {
 	close(w.shutdown)
-	logging.Info("NodeWorker.WaitingForShutdown", types.Nodes, "node_id", w.nodeId)
+	logging.Debug("NodeWorker.WaitingForShutdown", types.Nodes, "node_id", w.nodeId)
 	w.wg.Wait() // Wait for all pending commands to complete
 }
 
@@ -191,12 +191,12 @@ func (w *NodeWorker) startWebSocket(recorder cosmosclient.CosmosMessageClient) {
 }
 
 func (w *NodeWorker) stopWebSocket() {
-	logging.Info("WebSocket. Stopping client for node: getting lock", types.PoC, "nodeId", w.nodeId)
+	logging.Debug("WebSocket. Stopping client for node: getting lock", types.PoC, "nodeId", w.nodeId)
 	w.wsClientMu.Lock()
 	defer w.wsClientMu.Unlock()
 
 	if w.wsClient != nil {
-		logging.Info("WebSocket. Stopping client for node: stopping!", types.PoC, "nodeId", w.nodeId)
+		logging.Debug("WebSocket. Stopping client for node: stopping!", types.PoC, "nodeId", w.nodeId)
 		w.wsClient.Stop()
 		w.wsClient = nil
 		logging.Info("WebSocket. Stopped client for node", types.PoC, "nodeId", w.nodeId)

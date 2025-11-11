@@ -88,7 +88,7 @@ func (c *WebSocketClient) run() {
 			}
 		}
 
-		logging.Info("WebSocket. Connected to node", types.PoC, "nodeId", c.nodeID, "wsURL", c.wsURL)
+		logging.Debug("WebSocket. Connected to node", types.PoC, "nodeId", c.nodeID, "wsURL", c.wsURL)
 
 		c.readProcessAckLoop(conn)
 
