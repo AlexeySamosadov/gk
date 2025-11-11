@@ -128,9 +128,11 @@ func DefaultValidationParams() *ValidationParams {
 		TimestampAdvance:               30,
 		BadParticipantInvalidationRate: DecimalFromFloat(0.20),
 		InvalidationHThreshold:         DecimalFromFloat(4),
+		InvalidReputationPreserve:      DecimalFromFloat(0.0),
 		DowntimeBadPercentage:          DecimalFromFloat(0.20),
 		DowntimeGoodPercentage:         DecimalFromFloat(0.1),
 		DowntimeHThreshold:             DecimalFromFloat(4),
+		DowntimeReputationPreserve:     DecimalFromFloat(0.0),
 		QuickFailureThreshold:          DecimalFromFloat(0.000001),
 	}
 }
