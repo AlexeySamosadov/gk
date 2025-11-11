@@ -39,7 +39,14 @@ type WebSocketClient struct {
 
 func NewWebSocketClient(nodeID string, pocURL string, recorder cosmosclient.CosmosMessageClient) *WebSocketClient {
 	ctx, cancel := context.WithCancel(context.Background())
-	wsURL := convertHTTPToWSURL(pocURL) + "/api/v1/pow/ws"
+
+	// If caller passed a full ws:// or wss:// URL, use it as-is. Otherwise, convert and append default path.
+	var wsURL string
+	if len(pocURL) >= 5 && (pocURL[:5] == "ws://" || (len(pocURL) >= 6 && pocURL[:6] == "wss://")) {
+		wsURL = pocURL
+	} else {
+		wsURL = convertHTTPToWSURL(pocURL) + "/api/v1/pow/ws"
+	}
 
 	return &WebSocketClient{
 		nodeID:  nodeID,
