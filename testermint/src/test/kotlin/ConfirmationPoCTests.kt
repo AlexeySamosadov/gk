@@ -465,6 +465,12 @@ class ConfirmationPoCTests : TestermintTest() {
         val numPocSlotTrue = pocSlotAllocation.count { it.pocSlot }
         val numPocSlotFalse = pocSlotAllocation.count { !it.pocSlot }
         
+        // Ensure we have nodes with POC_SLOT=false for confirmation validation
+        require(numPocSlotFalse > 0) {
+            "All ${pocSlotAllocation.size} nodes were allocated POC_SLOT=true, leaving no nodes for confirmation validation. " +
+            "This test requires some nodes to remain POC_SLOT=false. Try lowering pocSlotAllocation parameter."
+        }
+        
         // During confirmation, POC_SLOT=false nodes will return weight=8 (instead of 10)
         // POC_SLOT=true nodes preserve their original weight=10
         val confirmedWeightPerNode = 8L
@@ -659,6 +665,12 @@ class ConfirmationPoCTests : TestermintTest() {
         val numPocSlotTrue = pocSlotAllocation.count { it.pocSlot }
         val numPocSlotFalse = pocSlotAllocation.count { !it.pocSlot }
 
+        // Ensure we have nodes with POC_SLOT=false for confirmation validation
+        require(numPocSlotFalse > 0) {
+            "All ${pocSlotAllocation.size} nodes were allocated POC_SLOT=true, leaving no nodes for confirmation validation. " +
+            "This test requires some nodes to remain POC_SLOT=false. Try lowering pocSlotAllocation parameter."
+        }
+
         val expectedFinalWeight = 80L
         val confirmedWeightPerNode = (expectedFinalWeight - 30*numPocSlotTrue) / numPocSlotFalse
 
@@ -744,11 +756,14 @@ class ConfirmationPoCTests : TestermintTest() {
     
     private fun createConfirmationPoCSpec(
         expectedConfirmationsPerEpoch: Long,
-        alphaThreshold: Double = 0.70
+        alphaThreshold: Double = 0.70,
+        pocSlotAllocation: Double = 0.33  // Default to 33% to ensure some nodes remain POC_SLOT=false
     ): Spec<AppState> {
         // Configure epoch params and confirmation PoC params
         // epochLength=40 provides sufficient inference phase window for confirmation PoC trigger
         // pocStageDuration=5, pocValidationDuration=4 gives confirmation PoC enough time to complete
+        // pocSlotAllocation controls what fraction of nodes get POC_SLOT=true (serve inference during PoC)
+        // Setting lower values (e.g., 0.33) ensures nodes remain POC_SLOT=false for confirmation validation
         return spec {
             this[AppState::inference] = spec<InferenceState> {
                 this[InferenceState::params] = spec<InferenceParams> {
@@ -757,6 +772,7 @@ class ConfirmationPoCTests : TestermintTest() {
                         this[EpochParams::pocStageDuration] = 5L
                         this[EpochParams::pocValidationDuration] = 4L
                         this[EpochParams::pocExchangeDuration] = 2L
+                        this[EpochParams::pocSlotAllocation] = Decimal.fromDouble(pocSlotAllocation)
                     }
                     this[InferenceParams::confirmationPocParams] = spec<ConfirmationPoCParams> {
                         this[ConfirmationPoCParams::expectedConfirmationsPerEpoch] = expectedConfirmationsPerEpoch
