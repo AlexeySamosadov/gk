@@ -33,8 +33,21 @@ func (c StartPocCommand) Execute(b *Broker) {
 		return
 	}
 
-	if epochState.CurrentPhase != types.PoCGeneratePhase {
-		logging.Warn("StartPocCommand: skipping outdated command execution. current phase isn't PoCGeneratePhase", types.PoC,
+	// Check if we should run PoC (regular OR confirmation)
+	shouldRunPoC := epochState.CurrentPhase == types.PoCGeneratePhase
+
+	// Confirmation PoC during inference phase
+	if epochState.CurrentPhase == types.InferencePhase && epochState.ActiveConfirmationPoCEvent != nil {
+		event := epochState.ActiveConfirmationPoCEvent
+		epochParams := &epochState.LatestEpoch.EpochParams
+		currentHeight := epochState.CurrentBlock.Height
+		if currentHeight >= event.GenerationStartHeight && currentHeight <= event.GetGenerationEnd(epochParams) {
+			shouldRunPoC = true
+		}
+	}
+
+	if !shouldRunPoC {
+		logging.Warn("StartPocCommand: skipping outdated command execution. current phase isn't PoCGeneratePhase and no active confirmation PoC", types.PoC,
 			"current_phase", epochState.CurrentPhase,
 			"current_block_height", epochState.CurrentBlock.Height,
 			"epoch_index", epochState.LatestEpoch.EpochIndex,
@@ -129,13 +142,27 @@ func (c InitValidateCommand) Execute(b *Broker) {
 		return
 	}
 
-	if epochState.CurrentPhase != types.PoCValidatePhase &&
+	// Check validation phase (regular OR confirmation)
+	shouldValidate := epochState.CurrentPhase == types.PoCValidatePhase ||
 		// FIXME: A bit too wide, it should be PoCGenerateWindDownPhase AND after poc end,
 		//  but we rely on node dispatcher to not send it too early
 		//  if we want to be 100% sure we should check based on block height
 		//  by adding some additional methods for getting block height stage cutoffs for current epoch
-		epochState.CurrentPhase != types.PoCGenerateWindDownPhase {
-		logging.Warn("InitValidateCommand: skipping outdated command execution. current phase isn't PoCValidatePhase", types.PoC,
+		epochState.CurrentPhase == types.PoCGenerateWindDownPhase
+
+	// Confirmation PoC validation during inference phase
+	if epochState.CurrentPhase == types.InferencePhase && epochState.ActiveConfirmationPoCEvent != nil {
+		event := epochState.ActiveConfirmationPoCEvent
+		epochParams := &epochState.LatestEpoch.EpochParams
+		currentHeight := epochState.CurrentBlock.Height
+		// Accept at exchange end (transition) OR during validation window
+		if currentHeight == event.GetExchangeEnd(epochParams) || event.IsInValidationWindow(currentHeight, epochParams) {
+			shouldValidate = true
+		}
+	}
+
+	if !shouldValidate {
+		logging.Warn("InitValidateCommand: skipping outdated command execution. current phase isn't PoCValidatePhase and no active confirmation PoC", types.PoC,
 			"current_phase", epochState.CurrentPhase,
 			"current_block_height", epochState.CurrentBlock.Height,
 			"epoch_index", epochState.LatestEpoch.EpochIndex,

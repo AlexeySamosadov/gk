@@ -71,6 +71,7 @@ func NewTestBroker() *Broker {
 		&types.Epoch{Index: 0, PocStartBlockHeight: 0},
 		&types.EpochParams{},
 		true,
+		nil,
 	)
 
 	mockChainBridge := &MockBrokerChainBridge{}

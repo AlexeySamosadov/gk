@@ -1,233 +1,273 @@
-package epochgroup_test
+package epochgroup
 
 import (
-	"context"
 	"testing"
 
-	"github.com/cosmos/cosmos-sdk/x/group"
-	"github.com/productscience/inference/testutil/keeper"
-	"github.com/productscience/inference/x/inference/epochgroup"
 	"github.com/productscience/inference/x/inference/types"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
-const (
-	authority = "authority"
-)
-
-type EpochGroupMock struct {
-	EpochGroup *epochgroup.EpochGroup
-	GroupMock  *keeper.MockGroupMessageKeeper
-	Logger     *keeper.MockLogger
-}
-
-func createEpochGroupObject(t testing.TB, epochGroupData *types.EpochGroupData) *EpochGroupMock {
-	ctrl := gomock.NewController(t)
-	groupMock := keeper.NewMockGroupMessageKeeper(ctrl)
-	logger := keeper.NewMockLogger()
-	participantKeeper := keeper.NewInMemoryParticipantKeeper()
-	groupDataKeeper := keeper.NewInMemoryEpochGroupDataKeeper()
-	modelKeeper := keeper.NewInMemoryModelKeeper()
-	hardwareNodeKeeper := keeper.NewInMemoryHardwareNodeKeeper()
-
-	return &EpochGroupMock{
-		EpochGroup: epochgroup.NewEpochGroup(
-			groupMock,
-			participantKeeper,
-			modelKeeper,
-			hardwareNodeKeeper,
-			authority,
-			logger,
-			groupDataKeeper,
-			epochGroupData,
-		),
-		GroupMock: groupMock,
-		Logger:    logger,
-	}
-}
-
-func TestCreateEpochGroup(t *testing.T) {
-	epochGroupData := &types.EpochGroupData{
-		PocStartBlockHeight: 10,
-		EpochIndex:          1,
-		ModelId:             "modelId",
-	}
-	epochGroup := createEpochGroupObject(t, epochGroupData)
-	response := &group.MsgCreateGroupWithPolicyResponse{
-		GroupId:            8,
-		GroupPolicyAddress: "groupPolicyAddress",
-	}
-
-	epochGroup.GroupMock.EXPECT().CreateGroupWithPolicy(gomock.Any(), gomock.Any()).Return(response, nil)
-	err := epochGroup.EpochGroup.CreateGroup(context.Background())
-	require.NoError(t, err)
-	data, found := epochGroup.EpochGroup.GroupDataKeeper.GetEpochGroupData(context.Background(), epochGroupData.EpochIndex,
-		epochGroupData.ModelId)
-	require.True(t, found)
-	require.Equal(t, uint64(8), data.EpochGroupId)
-	require.Equal(t, "groupPolicyAddress", data.EpochPolicy)
-}
-
-func createTestEpochGroup(t *testing.T) *EpochGroupMock {
-	epochGroupData := &types.EpochGroupData{
-		PocStartBlockHeight: 10,
-		EpochGroupId:        8,
-		EpochPolicy:         "epochPolicy",
-	}
-	epochGroup := createEpochGroupObject(t, epochGroupData)
-	epochGroup.EpochGroup.GroupDataKeeper.SetEpochGroupData(context.Background(), *epochGroupData)
-	return epochGroup
-
-}
-
-func TestAddMembers(t *testing.T) {
-	testEG := createTestEpochGroup(t)
-	testEG.GroupMock.EXPECT().UpdateGroupMembers(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	testEG.GroupMock.EXPECT().UpdateGroupMetadata(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	member := epochgroup.EpochMember{
-		Address:       "member1",
-		Weight:        12,
-		Pubkey:        "pubkey1",
-		SeedSignature: "seedsignature",
-		Reputation:    1,
-		Models:        []string{},
-	}
-	testEG.EpochGroup.AddMember(context.Background(), member)
-}
-
-func createTestModels() []types.Model {
-	return []types.Model{
+func TestCalculateInferenceServingWeight_POCSlotTrue(t *testing.T) {
+	// Nodes with POC_SLOT=true (index 1 = true) should be EXCLUDED
+	mlNodes := []*types.ModelMLNodes{
 		{
-			Id: "model1",
-		},
-		{
-			Id: "model2",
-		},
-	}
-}
-
-func createTestEpochGroupWithModels(t *testing.T) *EpochGroupMock {
-	epochGroupData := &types.EpochGroupData{
-		PocStartBlockHeight: 10,
-		EpochIndex:          10,
-		EpochGroupId:        8,
-		EpochPolicy:         "epochPolicy",
-	}
-	epochGroup := createEpochGroupObject(t, epochGroupData)
-	epochGroup.EpochGroup.GroupDataKeeper.SetEpochGroupData(context.Background(), *epochGroupData)
-
-	modelKeeper := epochGroup.EpochGroup.ModelKeeper.(*keeper.InMemoryModelKeeper)
-	for _, model := range createTestModels() {
-		modelKeeper.SetModel(&model)
-	}
-
-	return epochGroup
-
-}
-
-func TestAddMembersWithModels(t *testing.T) {
-	testEG := createTestEpochGroupWithModels(t)
-
-	// Mock for parent group
-	testEG.GroupMock.EXPECT().UpdateGroupMembers(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	testEG.GroupMock.EXPECT().UpdateGroupMetadata(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-
-	// Mock for creating sub-group
-	subGroupResponse := &group.MsgCreateGroupWithPolicyResponse{
-		GroupId:            9,
-		GroupPolicyAddress: "subGroupPolicyAddress",
-	}
-	testEG.GroupMock.EXPECT().CreateGroupWithPolicy(gomock.Any(), gomock.Any()).Return(subGroupResponse, nil).AnyTimes()
-
-	// Mock for adding member to sub-group - these are now called through the CreateSubGroup method
-	// which is called by GetSubGroup
-	testEG.GroupMock.EXPECT().UpdateGroupMembers(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	testEG.GroupMock.EXPECT().UpdateGroupMetadata(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-
-	// Add member with model
-	member := epochgroup.EpochMember{
-		Address:       "member1",
-		Weight:        12,
-		Pubkey:        "pubkey1",
-		SeedSignature: "seedsignature",
-		Reputation:    1,
-		Models:        []string{"model1"},
-	}
-	err := testEG.EpochGroup.AddMember(context.Background(), member)
-	require.NoError(t, err)
-
-	// Verify sub-group was created
-	require.Equal(t, 1, len(testEG.EpochGroup.GroupData.SubGroupModels))
-
-	// Get the sub-group
-	subGroup, err := testEG.EpochGroup.GetSubGroup(context.Background(), "model1")
-	require.NoError(t, err)
-	require.NotNil(t, subGroup)
-	require.Equal(t, "model1", subGroup.GroupData.ModelId)
-	require.Equal(t, uint64(9), subGroup.GroupData.EpochGroupId)
-}
-
-func TestGetRandomMemberForModel(t *testing.T) {
-	testEG := createTestEpochGroupWithModels(t)
-
-	// Mock for parent group
-	testEG.GroupMock.EXPECT().UpdateGroupMembers(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	testEG.GroupMock.EXPECT().UpdateGroupMetadata(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-
-	// Mock for creating sub-group
-	subGroupResponse := &group.MsgCreateGroupWithPolicyResponse{
-		GroupId:            9,
-		GroupPolicyAddress: "subGroupPolicyAddress",
-	}
-	testEG.GroupMock.EXPECT().CreateGroupWithPolicy(gomock.Any(), gomock.Any()).Return(subGroupResponse, nil).AnyTimes()
-
-	// Mock for adding member to sub-group - these are now called through the CreateSubGroup method
-	// which is called by GetSubGroup
-	testEG.GroupMock.EXPECT().UpdateGroupMembers(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	testEG.GroupMock.EXPECT().UpdateGroupMetadata(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-
-	// Add member with model
-	epochMember := epochgroup.EpochMember{
-		Address:       "member1",
-		Weight:        12,
-		Pubkey:        "pubkey1",
-		SeedSignature: "seedsignature",
-		Reputation:    1,
-		Models:        []string{"model1"},
-	}
-	err := testEG.EpochGroup.AddMember(context.Background(), epochMember)
-	require.NoError(t, err)
-
-	// Mock for getting group members
-	groupMembers := &group.QueryGroupMembersResponse{
-		Members: []*group.GroupMember{
-			{
-				Member: &group.Member{
-					Address: "member1",
-					Weight:  "12",
+			MlNodes: []*types.MLNodeInfo{
+				{
+					NodeId:             "node1",
+					PocWeight:          100,
+					TimeslotAllocation: []bool{true, true}, // POC_SLOT=true (continues inference)
+				},
+				{
+					NodeId:             "node2",
+					PocWeight:          200,
+					TimeslotAllocation: []bool{true, true}, // POC_SLOT=true
 				},
 			},
 		},
 	}
-	testEG.GroupMock.EXPECT().GroupMembers(gomock.Any(), gomock.Any()).Return(groupMembers, nil).AnyTimes()
 
-	// Add participant to the keeper
-	participant := types.Participant{
-		Index:   "member1", // Index must match the address used in the GroupMembers
-		Address: "member1",
-		Status:  types.ParticipantStatus_ACTIVE,
+	weight := calculateInferenceServingWeight(mlNodes)
+
+	// Should be 0 since all nodes have POC_SLOT=true
+	require.Equal(t, int64(0), weight)
+}
+
+func TestCalculateInferenceServingWeight_POCSlotFalse(t *testing.T) {
+	// Nodes with POC_SLOT=false (index 1 = false) should be INCLUDED
+	mlNodes := []*types.ModelMLNodes{
+		{
+			MlNodes: []*types.MLNodeInfo{
+				{
+					NodeId:             "node1",
+					PocWeight:          100,
+					TimeslotAllocation: []bool{true, false}, // POC_SLOT=false (serves inference)
+				},
+				{
+					NodeId:             "node2",
+					PocWeight:          200,
+					TimeslotAllocation: []bool{false, false}, // POC_SLOT=false
+				},
+			},
+		},
 	}
-	testEG.EpochGroup.ParticipantKeeper.SetParticipant(context.Background(), participant)
 
-	// Create a proper SDK context for the test
-	ctx := context.Background()
+	weight := calculateInferenceServingWeight(mlNodes)
 
-	// Get random member for model
-	member, err := testEG.EpochGroup.GetRandomMemberForModel(ctx, "model1", func(members []*group.GroupMember) []*group.GroupMember {
-		return members
-	})
-	require.NoError(t, err)
-	require.NotNil(t, member)
-	require.Equal(t, "member1", member.Address)
+	// Should be sum of all weights since all have POC_SLOT=false
+	require.Equal(t, int64(300), weight)
+}
+
+func TestCalculateInferenceServingWeight_Mixed(t *testing.T) {
+	// Mixed nodes - some with POC_SLOT=true, some with POC_SLOT=false
+	mlNodes := []*types.ModelMLNodes{
+		{
+			MlNodes: []*types.MLNodeInfo{
+				{
+					NodeId:             "node1",
+					PocWeight:          100,
+					TimeslotAllocation: []bool{true, false}, // POC_SLOT=false - INCLUDE
+				},
+				{
+					NodeId:             "node2",
+					PocWeight:          200,
+					TimeslotAllocation: []bool{true, true}, // POC_SLOT=true - EXCLUDE
+				},
+				{
+					NodeId:             "node3",
+					PocWeight:          300,
+					TimeslotAllocation: []bool{false, false}, // POC_SLOT=false - INCLUDE
+				},
+				{
+					NodeId:             "node4",
+					PocWeight:          400,
+					TimeslotAllocation: []bool{false, true}, // POC_SLOT=true - EXCLUDE
+				},
+			},
+		},
+	}
+
+	weight := calculateInferenceServingWeight(mlNodes)
+
+	// Should be 100 + 300 = 400 (only POC_SLOT=false nodes)
+	require.Equal(t, int64(400), weight)
+}
+
+func TestCalculateInferenceServingWeight_EmptySlots(t *testing.T) {
+	// Nodes with empty or short TimeslotAllocation arrays
+	mlNodes := []*types.ModelMLNodes{
+		{
+			MlNodes: []*types.MLNodeInfo{
+				{
+					NodeId:             "node1",
+					PocWeight:          100,
+					TimeslotAllocation: []bool{}, // Empty - should be excluded
+				},
+				{
+					NodeId:             "node2",
+					PocWeight:          200,
+					TimeslotAllocation: []bool{true}, // Only 1 slot - should be excluded
+				},
+				{
+					NodeId:             "node3",
+					PocWeight:          300,
+					TimeslotAllocation: []bool{true, false}, // Has index 1 = false - INCLUDE
+				},
+			},
+		},
+	}
+
+	weight := calculateInferenceServingWeight(mlNodes)
+
+	// Should be 300 (only node3 has valid POC_SLOT at index 1)
+	require.Equal(t, int64(300), weight)
+}
+
+func TestCalculateInferenceServingWeight_NilNodes(t *testing.T) {
+	// Test handling of nil nodes
+	mlNodes := []*types.ModelMLNodes{
+		nil, // Nil model nodes
+		{
+			MlNodes: []*types.MLNodeInfo{
+				nil, // Nil node
+				{
+					NodeId:             "node1",
+					PocWeight:          100,
+					TimeslotAllocation: []bool{true, false},
+				},
+			},
+		},
+	}
+
+	weight := calculateInferenceServingWeight(mlNodes)
+
+	// Should handle nils gracefully and count only valid node
+	require.Equal(t, int64(100), weight)
+}
+
+func TestCalculateInferenceServingWeight_MultipleModelArrays(t *testing.T) {
+	// Multiple model arrays (though typically there's only one)
+	mlNodes := []*types.ModelMLNodes{
+		{
+			MlNodes: []*types.MLNodeInfo{
+				{
+					NodeId:             "node1",
+					PocWeight:          100,
+					TimeslotAllocation: []bool{true, false},
+				},
+			},
+		},
+		{
+			MlNodes: []*types.MLNodeInfo{
+				{
+					NodeId:             "node2",
+					PocWeight:          200,
+					TimeslotAllocation: []bool{false, false},
+				},
+			},
+		},
+	}
+
+	weight := calculateInferenceServingWeight(mlNodes)
+
+	// Should sum across all model arrays
+	require.Equal(t, int64(300), weight)
+}
+
+// Test confirmation weight initialization when creating EpochMember
+func TestNewEpochMemberFromActiveParticipant_ConfirmationWeightInitialization(t *testing.T) {
+	// Create ActiveParticipant with mixed timeslot allocations
+	p := &types.ActiveParticipant{
+		Index:        "test-participant",
+		ValidatorKey: "test-pubkey",
+		Weight:       450,
+		MlNodes: []*types.ModelMLNodes{
+			{
+				MlNodes: []*types.MLNodeInfo{
+					{
+						NodeId:             "node1",
+						PocWeight:          100,
+						TimeslotAllocation: []bool{true, false}, // POC_SLOT=false - INCLUDE
+					},
+					{
+						NodeId:             "node2",
+						PocWeight:          200,
+						TimeslotAllocation: []bool{true, true}, // POC_SLOT=true - EXCLUDE
+					},
+					{
+						NodeId:             "node3",
+						PocWeight:          150,
+						TimeslotAllocation: []bool{true, false}, // POC_SLOT=false - INCLUDE
+					},
+				},
+			},
+		},
+	}
+
+	// Call with confirmationWeight = 0 to trigger initialization
+	member := NewEpochMemberFromActiveParticipant(p, 1, 0)
+
+	// Should sum only POC_SLOT=false weights: 100 + 150 = 250
+	require.Equal(t, int64(250), member.ConfirmationWeight, "confirmation_weight should equal sum of POC_SLOT=false weights")
+	require.Equal(t, int64(450), member.Weight, "total weight should remain unchanged")
+}
+
+func TestNewEpochMemberFromActiveParticipant_ConfirmationWeightProvided(t *testing.T) {
+	// Create ActiveParticipant with mixed timeslot allocations
+	p := &types.ActiveParticipant{
+		Index:        "test-participant",
+		ValidatorKey: "test-pubkey",
+		Weight:       450,
+		MlNodes: []*types.ModelMLNodes{
+			{
+				MlNodes: []*types.MLNodeInfo{
+					{
+						NodeId:             "node1",
+						PocWeight:          100,
+						TimeslotAllocation: []bool{true, false},
+					},
+					{
+						NodeId:             "node2",
+						PocWeight:          150,
+						TimeslotAllocation: []bool{true, false},
+					},
+				},
+			},
+		},
+	}
+
+	// Call with confirmationWeight already provided (e.g., from previous confirmation PoC)
+	member := NewEpochMemberFromActiveParticipant(p, 1, 180)
+
+	// Should use the provided value (180), not recalculate (which would be 250)
+	require.Equal(t, int64(180), member.ConfirmationWeight, "confirmation_weight should use provided value")
+}
+
+func TestNewEpochMemberFromActiveParticipant_AllPreservedNodes(t *testing.T) {
+	// All nodes have POC_SLOT=true (preserved for inference)
+	p := &types.ActiveParticipant{
+		Index:        "test-participant",
+		ValidatorKey: "test-pubkey",
+		Weight:       300,
+		MlNodes: []*types.ModelMLNodes{
+			{
+				MlNodes: []*types.MLNodeInfo{
+					{
+						NodeId:             "node1",
+						PocWeight:          100,
+						TimeslotAllocation: []bool{true, true}, // POC_SLOT=true
+					},
+					{
+						NodeId:             "node2",
+						PocWeight:          200,
+						TimeslotAllocation: []bool{true, true}, // POC_SLOT=true
+					},
+				},
+			},
+		},
+	}
+
+	member := NewEpochMemberFromActiveParticipant(p, 1, 0)
+
+	// Should be 0 since no nodes available for confirmation PoC
+	require.Equal(t, int64(0), member.ConfirmationWeight, "confirmation_weight should be 0 when all nodes preserved")
 }

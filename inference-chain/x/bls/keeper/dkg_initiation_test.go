@@ -11,7 +11,7 @@ import (
 )
 
 func TestAssignSlots(t *testing.T) {
-	k, _ := keepertest.BlsKeeper(t)
+	k, ctx := keepertest.BlsKeeper(t)
 
 	tests := []struct {
 		name          string
@@ -159,7 +159,7 @@ func TestAssignSlots(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := k.AssignSlots(tt.participants, tt.totalSlots)
+			result, err := k.AssignSlots(ctx, tt.participants, tt.totalSlots)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -213,7 +213,7 @@ func TestAssignSlots(t *testing.T) {
 }
 
 func TestAssignSlotsWithDecimalWeights(t *testing.T) {
-	k, _ := keepertest.BlsKeeper(t)
+	k, ctx := keepertest.BlsKeeper(t)
 
 	// Test with decimal weights that don't sum to a round number
 	participants := []types.ParticipantWithWeightAndKey{
@@ -234,7 +234,7 @@ func TestAssignSlotsWithDecimalWeights(t *testing.T) {
 		},
 	}
 
-	result, err := k.AssignSlots(participants, 1000)
+	result, err := k.AssignSlots(ctx, participants, 1000)
 	require.NoError(t, err)
 	require.Len(t, result, 3)
 
@@ -250,4 +250,45 @@ func TestAssignSlotsWithDecimalWeights(t *testing.T) {
 	require.Equal(t, result[0].SlotEndIndex+1, result[1].SlotStartIndex)
 	require.Equal(t, result[1].SlotEndIndex+1, result[2].SlotStartIndex)
 	require.Equal(t, uint32(999), result[2].SlotEndIndex)
+}
+
+func TestAssignSlotsEnsuresMinimumSlotForNonZeroWeight(t *testing.T) {
+	k, ctx := keepertest.BlsKeeper(t)
+
+	participants := []types.ParticipantWithWeightAndKey{
+		{
+			Address:            "cosmos1guardian",
+			PercentageWeight:   math.LegacyMustNewDecFromStr("98.5"),
+			Secp256k1PublicKey: []byte("guardian_key"),
+		},
+		{
+			Address:            "cosmos1small1",
+			PercentageWeight:   math.LegacyMustNewDecFromStr("0.5"),
+			Secp256k1PublicKey: []byte("small1_key"),
+		},
+		{
+			Address:            "cosmos1small2",
+			PercentageWeight:   math.LegacyMustNewDecFromStr("0.5"),
+			Secp256k1PublicKey: []byte("small2_key"),
+		},
+		{
+			Address:            "cosmos1small3",
+			PercentageWeight:   math.LegacyMustNewDecFromStr("0.5"),
+			Secp256k1PublicKey: []byte("small3_key"),
+		},
+	}
+
+	result, err := k.AssignSlots(ctx, participants, 100)
+	require.NoError(t, err)
+	require.Len(t, result, 4)
+
+	slotsByAddress := make(map[string]uint32)
+	for _, participant := range result {
+		slotsByAddress[participant.Address] = participant.SlotEndIndex - participant.SlotStartIndex + 1
+	}
+
+	require.Equal(t, uint32(97), slotsByAddress["cosmos1guardian"])
+	require.Equal(t, uint32(1), slotsByAddress["cosmos1small1"])
+	require.Equal(t, uint32(1), slotsByAddress["cosmos1small2"])
+	require.Equal(t, uint32(1), slotsByAddress["cosmos1small3"])
 }

@@ -522,7 +522,7 @@ func (b *Broker) nodeAvailable(node *NodeWithState, neededModel string, currentE
 	}
 	logging.Info("nodeAvailable. Node is not administratively enabled", types.Nodes, "nodeId", node.Node.Id, "adminState", node.State.AdminState)
 
-	_, found := node.Node.Models[neededModel]
+	_, found := node.State.EpochModels[neededModel]
 	if !found {
 		logging.Info("Node does not have neededModel", types.Nodes, "node_id", node.Node.Id, "neededModel", neededModel)
 		return false, fmt.Sprintf("Node does not have model %s", neededModel)
@@ -1059,6 +1059,16 @@ func (b *Broker) prefetchPocParams(epochState chainphase.EpochState, nodesToDisp
 	}
 
 	if needsPocParams {
+		// CONFIRMATION PoC - use hash from event (populated by chain at generation_start_height)
+		if epochState.CurrentPhase == types.InferencePhase && epochState.ActiveConfirmationPoCEvent != nil {
+			event := epochState.ActiveConfirmationPoCEvent
+			return &pocParams{
+				startPoCBlockHeight: event.TriggerHeight,
+				startPoCBlockHash:   event.PocSeedBlockHash,
+			}, nil
+		}
+
+		// REGULAR PoC - query hash as usual
 		currentPoCParams, pocParamsErr := b.queryCurrentPoCParams(epochState.LatestEpoch.PocStartBlockHeight)
 		if pocParamsErr != nil {
 			logging.Error("Failed to query PoC Generation parameters, skipping PoC reconciliation", types.Nodes, "error", pocParamsErr, "blockHeight", blockHeight)
