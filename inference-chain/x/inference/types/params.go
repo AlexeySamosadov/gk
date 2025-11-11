@@ -357,6 +357,31 @@ func (p *ValidationParams) Validate() error {
 	if p.MissRequestsPenalty == nil {
 		return fmt.Errorf("miss requests penalty cannot be nil")
 	}
+	// v0.2.5 parameters
+	if p.BadParticipantInvalidationRate == nil {
+		return fmt.Errorf("bad participant invalidation rate cannot be nil")
+	}
+	if p.InvalidationHThreshold == nil {
+		return fmt.Errorf("invalidation h threshold cannot be nil")
+	}
+	if p.DowntimeGoodPercentage == nil {
+		return fmt.Errorf("downtime good percentage cannot be nil")
+	}
+	if p.DowntimeBadPercentage == nil {
+		return fmt.Errorf("downtime bad percentage cannot be nil")
+	}
+	if p.DowntimeHThreshold == nil {
+		return fmt.Errorf("downtime h threshold cannot be nil")
+	}
+	if p.QuickFailureThreshold == nil {
+		return fmt.Errorf("quick failure threshold cannot be nil")
+	}
+	if p.InvalidReputationPreserve == nil {
+		return fmt.Errorf("invalid reputation preserve cannot be nil")
+	}
+	if p.DowntimeReputationPreserve == nil {
+		return fmt.Errorf("downtime reputation preserve cannot be nil")
+	}
 	// Validate timestamp parameters
 	if p.TimestampExpiration <= 0 {
 		return fmt.Errorf("timestamp expiration must be positive")

@@ -40,7 +40,7 @@ func ComputeStatus(
 ) (status types.ParticipantStatus, reason ParticipantStatusReason, stats types.CurrentEpochStats) {
 	// Genesis only (for tests)
 	newStats := getStats(&newValue)
-	if validationParameters == nil || validationParameters.FalsePositiveRate == nil {
+	if validationParameters == nil || validationParameters.FalsePositiveRate == nil || validationParameters.QuickFailureThreshold == nil {
 		return types.ParticipantStatus_ACTIVE, NoReason, newStats
 	}
 
@@ -81,6 +81,9 @@ func ComputeStatus(
 }
 
 func getInactiveStatus(newStats *types.CurrentEpochStats, oldStats types.CurrentEpochStats, parameters *types.ValidationParams) Decision {
+	if parameters.DowntimeGoodPercentage == nil || parameters.DowntimeBadPercentage == nil || parameters.DowntimeHThreshold == nil {
+		return Error
+	}
 	newInferences := int64(newStats.InferenceCount) - int64(oldStats.InferenceCount)
 	newMissedInferences := int64(newStats.MissedRequests) - int64(oldStats.MissedRequests)
 	inactiveSprt, err := NewSPRT(
@@ -99,6 +102,9 @@ func getInactiveStatus(newStats *types.CurrentEpochStats, oldStats types.Current
 }
 
 func getInvalidationStatus(newStats *types.CurrentEpochStats, oldStats types.CurrentEpochStats, parameters *types.ValidationParams) Decision {
+	if parameters.BadParticipantInvalidationRate == nil || parameters.InvalidationHThreshold == nil {
+		return Error
+	}
 	newValidations := int64(newStats.ValidatedInferences) - int64(oldStats.ValidatedInferences)
 	newInvalidations := int64(newStats.InvalidatedInferences) - int64(oldStats.InvalidatedInferences)
 	//newInferences := newValue.CurrentEpochStats.InferenceCount - oldValue.CurrentEpochStats.InferenceCount

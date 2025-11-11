@@ -11379,7 +11379,7 @@ type EpochParams struct {
 	InferencePruningEpochThreshold uint64   `protobuf:"varint,11,opt,name=inference_pruning_epoch_threshold,json=inferencePruningEpochThreshold,proto3" json:"inference_pruning_epoch_threshold,omitempty"`
 	InferencePruningMax            int64    `protobuf:"varint,12,opt,name=inference_pruning_max,json=inferencePruningMax,proto3" json:"inference_pruning_max,omitempty"`
 	PocPruningMax                  int64    `protobuf:"varint,13,opt,name=poc_pruning_max,json=pocPruningMax,proto3" json:"poc_pruning_max,omitempty"`
-	PocSlotAllocation              *Decimal `protobuf:"bytes,14,opt,name=poc_slot_allocation,json=pocSlotAllocation,proto3" json:"poc_slot_allocation,omitempty"`
+	PocSlotAllocation              *Decimal `protobuf:"bytes,14,opt,name=poc_slot_allocation,json=pocSlotAllocation,proto3" json:"poc_slot_allocation,omitempty"` // Fraction of slots allocated to PoC (0.0 to 1.0, default 0.5)
 }
 
 func (x *EpochParams) Reset() {

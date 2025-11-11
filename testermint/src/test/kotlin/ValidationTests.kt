@@ -220,6 +220,7 @@ class ValidationTests : TestermintTest() {
                     this[InferenceParams::validationParams] = spec<ValidationParams> {
                         this[ValidationParams::minValidationAverage] = Decimal.fromDouble(100.0)
                         this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(100.0)
+                        this[ValidationParams::downtimeHThreshold] = Decimal.fromDouble(100.0)
 
                     }
                     this[InferenceParams::bandwidthLimitsParams] = spec<BandwidthLimitsParams> {

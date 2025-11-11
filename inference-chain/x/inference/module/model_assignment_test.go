@@ -1267,11 +1267,11 @@ func formatNodeID(participantIndex, nodeIndex int) string {
 
 func TestCalculateWeightThresholdWithCount_UniformWeights(t *testing.T) {
 	testCases := []struct {
-		name           string
-		weights        []int64
-		targetPercent  int
-		expThreshold   int64
-		expCount       int
+		name          string
+		weights       []int64
+		targetPercent int
+		expThreshold  int64
+		expCount      int
 	}{
 		{
 			name:          "Two uniform nodes, 25% target",
@@ -1321,11 +1321,11 @@ func TestCalculateWeightThresholdWithCount_UniformWeights(t *testing.T) {
 
 func TestCalculateWeightThresholdWithCount_HeterogeneousWeights(t *testing.T) {
 	testCases := []struct {
-		name           string
-		weights        []int64
-		targetPercent  int
-		expThreshold   int64
-		expCount       int
+		name          string
+		weights       []int64
+		targetPercent int
+		expThreshold  int64
+		expCount      int
 	}{
 		{
 			name:          "Heterogeneous weights, 25% target",
@@ -1361,11 +1361,11 @@ func TestCalculateWeightThresholdWithCount_HeterogeneousWeights(t *testing.T) {
 
 func TestCalculateWeightThresholdWithCount_EdgeCases(t *testing.T) {
 	testCases := []struct {
-		name           string
-		weights        []int64
-		targetPercent  int
-		expThreshold   int64
-		expCount       int
+		name          string
+		weights       []int64
+		targetPercent int
+		expThreshold  int64
+		expCount      int
 	}{
 		{
 			name:          "Empty weights",
@@ -1455,7 +1455,7 @@ func TestFilterNodesByWeightAndCount_CountLimit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			filtered := filterNodesByWeightAndCount(nodes, tc.threshold, tc.targetCount)
 			require.Len(t, filtered, tc.expCount, "Filtered count mismatch")
-			
+
 			for i, expId := range tc.expNodeIds {
 				require.Equal(t, expId, filtered[i].NodeId, "Node ID mismatch at index %d", i)
 			}
