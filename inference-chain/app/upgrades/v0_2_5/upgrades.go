@@ -55,9 +55,10 @@ func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.Ve
 	params.ValidationParams.InvalidReputationPreserve = types.DecimalFromFloat(0.0)
 	params.ValidationParams.BadParticipantInvalidationRate = types.DecimalFromFloat(0.1)
 	params.ValidationParams.InvalidationHThreshold = types.DecimalFromFloat(4.0)
-	params.ValidationParams.DowntimeGoodPercentage = types.DecimalFromFloat(0.1)
-	params.ValidationParams.DowntimeBadPercentage = types.DecimalFromFloat(0.2)
-	params.ValidationParams.DowntimeHThreshold = types.DecimalFromFloat(4.0)
+	// For now, effectively disable the downtime activity. 32k consecutive failures would be required
+	params.ValidationParams.DowntimeGoodPercentage = types.DecimalFromFloat(0.98)
+	params.ValidationParams.DowntimeBadPercentage = types.DecimalFromFloat(0.99)
+	params.ValidationParams.DowntimeHThreshold = types.DecimalFromFloat(100.0)
 	params.ValidationParams.DowntimeReputationPreserve = types.DecimalFromFloat(0.0)
 	params.ValidationParams.QuickFailureThreshold = types.DecimalFromFloat(0.000001)
 	params.BandwidthLimitsParams.MinimumConcurrentInvalidations = 1
