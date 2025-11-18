@@ -92,6 +92,12 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 					Short:          "Query pocBatchesForStage",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "block_height"}},
 				},
+				{
+					RpcMethod:      "PocValidationsForStage",
+					Use:            "poc-validations-for-stage [block-height]",
+					Short:          "Query pocValidationsForStage",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "block_height"}},
+				},
 
 				{
 					RpcMethod:      "GetCurrentEpoch",

@@ -279,20 +279,12 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 		transitionCount++
 		transitions = append(transitions, "VALIDATION->COMPLETED")
 
-		// Calculate and update confirmation weights
 		err := am.updateConfirmationWeights(ctx, &event)
 		if err != nil {
 			am.LogError("Confirmation PoC: Failed to update confirmation weights", types.PoC,
 				"epochIndex", event.EpochIndex,
 				"eventSequence", event.EventSequence,
 				"error", err)
-			// Continue with transition even if update fails
-		}
-
-		// Clear active event
-		err = am.keeper.ClearActiveConfirmationPoCEvent(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to clear active confirmation PoC event: %w", err)
 		}
 
 		am.LogInfo("Confirmation PoC: VALIDATION -> COMPLETED", types.PoC,
@@ -300,6 +292,22 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 			"eventSequence", event.EventSequence,
 			"blockHeight", blockHeight,
 			"validationEndHeight", event.GetValidationEnd(epochParams))
+	}
+
+	// Clear active event after transition delay
+	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_COMPLETED {
+		completionHeight := event.GetValidationEnd(epochParams) + 1
+		if blockHeight >= completionHeight+epochParams.SetNewValidatorsDelay {
+			err := am.keeper.ClearActiveConfirmationPoCEvent(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to clear active confirmation PoC event: %w", err)
+			}
+			updated = false
+			am.LogInfo("Confirmation PoC: Cleared active event", types.PoC,
+				"epochIndex", event.EpochIndex,
+				"eventSequence", event.EventSequence,
+				"blockHeight", blockHeight)
+		}
 	}
 
 	// Warn if multiple transitions occurred (catch-up scenario)
@@ -320,12 +328,10 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 			return fmt.Errorf("failed to update confirmation PoC event: %w", err)
 		}
 
-		// Update active event if not completed
-		if event.Phase != types.ConfirmationPoCPhase_CONFIRMATION_POC_COMPLETED {
-			err = am.keeper.SetActiveConfirmationPoCEvent(ctx, event)
-			if err != nil {
-				return fmt.Errorf("failed to update active confirmation PoC event: %w", err)
-			}
+		// Update active event (keep during COMPLETED transition period)
+		err = am.keeper.SetActiveConfirmationPoCEvent(ctx, event)
+		if err != nil {
+			return fmt.Errorf("failed to update active confirmation PoC event: %w", err)
 		}
 	}
 

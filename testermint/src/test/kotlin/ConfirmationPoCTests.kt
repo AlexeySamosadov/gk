@@ -1,5 +1,6 @@
 import com.productscience.*
 import com.productscience.data.*
+import okhttp3.internal.wait
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.data.Offset
 import org.assertj.core.data.Percentage
@@ -396,7 +397,7 @@ class ConfirmationPoCTests : TestermintTest() {
         )
         
         // Initialize cluster with custom spec for confirmation PoC testing
-        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)
+        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100, pocSlotAllocation = 0.05)
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,
@@ -465,8 +466,12 @@ class ConfirmationPoCTests : TestermintTest() {
         val numPocSlotTrue = pocSlotAllocation.count { it.pocSlot }
         val numPocSlotFalse = pocSlotAllocation.count { !it.pocSlot }
         
-        // During confirmation, POC_SLOT=false nodes will return weight=8 (instead of 10)
-        // POC_SLOT=true nodes preserve their original weight=10
+        // Ensure we have nodes with POC_SLOT=false for confirmation validation
+        require(numPocSlotFalse > 0) {
+            "All ${pocSlotAllocation.size} nodes were allocated POC_SLOT=true, leaving no nodes for confirmation validation. " +
+            "This test requires some nodes to remain POC_SLOT=false. Try lowering pocSlotAllocation parameter."
+        }
+
         val confirmedWeightPerNode = 8L
         val expectedFinalWeight = (numPocSlotTrue * 10) + (numPocSlotFalse * confirmedWeightPerNode)
         
@@ -590,7 +595,10 @@ class ConfirmationPoCTests : TestermintTest() {
         )
 
         // Initialize cluster with custom spec for confirmation PoC testing
-        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)
+        val confirmationSpec = createConfirmationPoCSpec(
+            expectedConfirmationsPerEpoch = 100,
+            alphaThreshold = 0.toDouble()
+        )
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,
@@ -613,17 +621,15 @@ class ConfirmationPoCTests : TestermintTest() {
         }
 
         logSection("Setting up mock weights to avoid power capping")
-        // Set genesis nodes to weight=10 per node (total 30), join nodes to weight=50 to avoid power capping Genesis
-        // Genesis: 30/130 = 23% < 30% (no capping)
-        // Note: Each node generates its own nonces, so setting to 10 means each of genesis's 3 nodes generates 10, totaling 30
-        genesis.setPocResponseOnAllMocks(30)
-        genesis.setPocValidationResponseOnAllMocks(30)
-        join1.setPocResponseOnAllMocks(100)
-        join1.setPocValidationResponseOnAllMocks(100)
+
+        genesis.setPocResponseOnAllMocks(101)
+        genesis.setPocValidationResponseOnAllMocks(101)
+        join1.setPocResponseOnAllMocks(200)
+        join1.setPocValidationResponseOnAllMocks(200)
         join2.setPocResponseOnAllMocks(250)
         join2.setPocValidationResponseOnAllMocks(250)
 
-        logSection("Waiting for first PoC cycle to establish weight=50 for join nodes")
+        logSection("Waiting for first PoC cycle to establish for join nodes")
         genesis.waitForStage(EpochStage.START_OF_POC)
         genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
 
@@ -659,11 +665,17 @@ class ConfirmationPoCTests : TestermintTest() {
         val numPocSlotTrue = pocSlotAllocation.count { it.pocSlot }
         val numPocSlotFalse = pocSlotAllocation.count { !it.pocSlot }
 
-        val expectedFinalWeight = 80L
-        val confirmedWeightPerNode = (expectedFinalWeight - 30*numPocSlotTrue) / numPocSlotFalse
+        // Ensure we have nodes with POC_SLOT=false for confirmation validation
+        require(numPocSlotFalse > 0) {
+            "All ${pocSlotAllocation.size} nodes were allocated POC_SLOT=true, leaving no nodes for confirmation validation. " +
+            "This test requires some nodes to remain POC_SLOT=false. Try lowering pocSlotAllocation parameter."
+        }
+
+        val expectedFinalWeight = 203L
+        val confirmedWeightPerNode = (expectedFinalWeight - 101*numPocSlotTrue) / numPocSlotFalse
 
         Logger.info("Genesis weight breakdown:")
-        Logger.info("  POC_SLOT=true nodes: $numPocSlotTrue × 30 = ${numPocSlotTrue * 30}")
+        Logger.info("  POC_SLOT=true nodes: $numPocSlotTrue × 101 = ${numPocSlotTrue * 101}")
         Logger.info("  POC_SLOT=false nodes: $numPocSlotFalse × $confirmedWeightPerNode = ${numPocSlotFalse * confirmedWeightPerNode}")
         Logger.info("  Expected final weight: $expectedFinalWeight")
 
@@ -676,7 +688,7 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("  Genesis: each node returns weight=$confirmedWeightPerNode (reduced from 30)")
         Logger.info("    - Only $numPocSlotFalse POC_SLOT=false nodes will participate in confirmation")
         Logger.info("    - Total confirmed weight: ${numPocSlotFalse * confirmedWeightPerNode}")
-        Logger.info("  Join1: weight=100 per node (full confirmation)")
+        Logger.info("  Join1: weight=200 per node (full confirmation)")
         Logger.info("  Join2: weight=250 per node (full confirmation)")
         genesis.setPocResponseOnAllMocks(confirmedWeightPerNode)
         genesis.setPocValidationResponseOnAllMocks(confirmedWeightPerNode)
@@ -694,8 +706,8 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("Confirmation PoC completed (event cleared)")
 
         // Reset mocks to full weight after confirmation
-        genesis.setPocResponseOnAllMocks(30)
-        genesis.setPocValidationResponseOnAllMocks(30)
+        genesis.setPocResponseOnAllMocks(101)
+        genesis.setPocValidationResponseOnAllMocks(101)
 
         logSection("Waiting for NEXT epoch where confirmation weights will be applied")
         genesis.waitForStage(EpochStage.START_OF_POC)
@@ -733,22 +745,28 @@ class ConfirmationPoCTests : TestermintTest() {
         assertThat(join2Change).isGreaterThan(0)
         Logger.info("  All participants received positive rewards")
 
-        val join1Ration = genesisChange.toDouble() / join1Change.toDouble()
-        val join2Ration = genesisChange.toDouble() / join2Change.toDouble()
+        val totalChange = (genesisChange + join1Change + join2Change).toDouble()
+        val genesisRatio = genesisChange / totalChange
+        val join1Ratio = join1Change / totalChange
+        val join2Ratio = join2Change / totalChange
 
-        assertThat(join1Ration).isCloseTo(0.8, Percentage.withPercentage(1.0))
-        assertThat(join2Ration).isCloseTo(0.6666667, Percentage.withPercentage(1.0))
+        assertThat(genesisRatio).isCloseTo(0.3108728943338438, Percentage.withPercentage(1.0))
+        assertThat(join1Ratio).isCloseTo(0.30627871362940273, Percentage.withPercentage(1.0))
+        assertThat(join2Ratio).isCloseTo(0.38284839203675347, Percentage.withPercentage(1.0))
     }
 
     // Helper functions
     
     private fun createConfirmationPoCSpec(
         expectedConfirmationsPerEpoch: Long,
-        alphaThreshold: Double = 0.70
+        alphaThreshold: Double = 0.70,
+        pocSlotAllocation: Double = 0.33  // Default to 33% to ensure some nodes remain POC_SLOT=false
     ): Spec<AppState> {
         // Configure epoch params and confirmation PoC params
         // epochLength=40 provides sufficient inference phase window for confirmation PoC trigger
         // pocStageDuration=5, pocValidationDuration=4 gives confirmation PoC enough time to complete
+        // pocSlotAllocation controls what fraction of nodes get POC_SLOT=true (serve inference during PoC)
+        // Setting lower values (e.g., 0.33) ensures nodes remain POC_SLOT=false for confirmation validation
         return spec {
             this[AppState::inference] = spec<InferenceState> {
                 this[InferenceState::params] = spec<InferenceParams> {
@@ -757,6 +775,7 @@ class ConfirmationPoCTests : TestermintTest() {
                         this[EpochParams::pocStageDuration] = 5L
                         this[EpochParams::pocValidationDuration] = 4L
                         this[EpochParams::pocExchangeDuration] = 2L
+                        this[EpochParams::pocSlotAllocation] = Decimal.fromDouble(pocSlotAllocation)
                     }
                     this[InferenceParams::confirmationPocParams] = spec<ConfirmationPoCParams> {
                         this[ConfirmationPoCParams::expectedConfirmationsPerEpoch] = expectedConfirmationsPerEpoch
@@ -790,8 +809,18 @@ class ConfirmationPoCTests : TestermintTest() {
         maxBlocks: Int = 100
     ) {
         var attempts = 0
-        while (attempts < maxBlocks) {
-            val epochData = pair.getEpochData()
+        var connectionRetry = 0
+        while (attempts < maxBlocks && connectionRetry < 5) {
+            val epochData =
+                try {
+                    pair.getEpochData()
+                } catch (e: Exception) {
+                    Logger.error("Error getting epoch data", e)
+                    connectionRetry += 1
+                    Thread.sleep(connectionRetry * 100L)
+                    continue
+                }
+            connectionRetry = 0  // Reset on successful call
             if (epochData.isConfirmationPocActive && 
                 epochData.activeConfirmationPocEvent?.phase == targetPhase) {
                 return

@@ -61,13 +61,15 @@ func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.Ve
 	params.ValidationParams.DowntimeHThreshold = types.DecimalFromFloat(100.0)
 	params.ValidationParams.DowntimeReputationPreserve = types.DecimalFromFloat(0.0)
 	params.ValidationParams.QuickFailureThreshold = types.DecimalFromFloat(0.000001)
+	params.ValidationParams.ExpirationBlocks = 50
 	params.BandwidthLimitsParams.MinimumConcurrentInvalidations = 1
 	if params.ConfirmationPocParams == nil {
 		params.ConfirmationPocParams = &types.ConfirmationPoCParams{}
 	}
-	params.ConfirmationPocParams.ExpectedConfirmationsPerEpoch = 0
+	params.ConfirmationPocParams.ExpectedConfirmationsPerEpoch = 1
 	params.ConfirmationPocParams.AlphaThreshold = types.DecimalFromFloat(0.5)
 	params.ConfirmationPocParams.SlashFraction = types.DecimalFromFloat(0.0)
 	params.ConfirmationPocParams.UpgradeProtectionWindow = 500
+	params.EpochParams.PocSlotAllocation = types.DecimalFromFloat(0.1)
 	return k.SetParams(ctx, params)
 }

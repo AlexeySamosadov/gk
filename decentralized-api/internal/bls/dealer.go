@@ -224,7 +224,7 @@ func (bm *BlsManager) generateDealerPart(epochID uint64, totalSlots, tDegree uin
 				// Convert base64 public key to secp256k1 bytes
 				pubKeyBytes, err := bm.convertPubKeyToSecp256k1Bytes(pubKeyBase64)
 				if err != nil {
-					logging.Warn("Failed to convert public key, skipping", inferenceTypes.BLS,
+					logging.Debug("Failed to convert public key, skipping", inferenceTypes.BLS,
 						"participant", participant.Address, "keyIndex", keyIndex,
 						"pubKeyBase64", pubKeyBase64, "error", err)
 					continue

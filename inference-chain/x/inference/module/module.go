@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"cosmossdk.io/collections"
-
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/depinject"
@@ -442,6 +440,9 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 	// Apply universal power capping to epoch powers
 	activeParticipants = am.applyEpochPowerCapping(ctx, activeParticipants)
 
+	modelAssigner.AllocateMLNodesForPoC(ctx, *upcomingEpoch, activeParticipants)
+	am.LogInfo("Finished PoC allocation for all participants", types.EpochGroup, "step", "poc_allocation_complete")
+
 	err = am.RegisterTopMiners(ctx, activeParticipants, blockTime)
 	if err != nil {
 		am.LogError("onEndOfPoCValidationStage: Unable to register top miners", types.Tokenomics, "error", err.Error())
@@ -666,12 +667,6 @@ func (am AppModule) moveUpcomingToEffectiveGroup(ctx context.Context, blockHeigh
 	err := am.keeper.ActiveInvalidations.Clear(ctx, nil)
 	if err != nil {
 		am.LogError("Unable to clear active invalidations", types.EpochGroup, "error", err.Error())
-	}
-
-	// Clear ExcludedParticipants for the epoch that just ended to keep scope to current epoch only
-	err = am.keeper.ExcludedParticipantsMap.Clear(ctx, collections.NewPrefixedPairRange[uint64, sdk.AccAddress](previousEpochIndex))
-	if err != nil {
-		am.LogError("Unable to clear excluded participants for previous epoch", types.EpochGroup, "epoch", previousEpochIndex, "error", err.Error())
 	}
 }
 

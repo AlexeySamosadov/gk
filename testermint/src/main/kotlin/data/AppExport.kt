@@ -140,6 +140,8 @@ data class EpochParams(
     val inferencePruningEpochThreshold: Long,
     val inferencePruningMax: Long,
     val pocPruningMax: Long,
+    @SerializedName("poc_slot_allocation")
+    val pocSlotAllocation: Decimal?,
 )
 
 data class Decimal(
@@ -201,6 +203,8 @@ data class ValidationParams(
     val downtimeHThreshold: Decimal?,
     @SerializedName("downtime_reputation_preserve")
     val downtimeReputationPreserve: Decimal?,
+    @SerializedName("quick_failure_threshold")
+    val quickFailureThreshold: Decimal?,
 )
 
 data class BandwidthLimitsParams(
@@ -227,6 +231,8 @@ data class ConfirmationPoCParams(
     val alphaThreshold: Decimal = Decimal(70, -2),  // 0.70
     @SerializedName("slash_fraction")
     val slashFraction: Decimal = Decimal(10, -2),  // 0.10
+    @SerializedName("upgrade_protection_window")
+    val upgradeProtectionWindow: Long = 2,  // Default: 500 blocks
 )
 
 data class PocParams(

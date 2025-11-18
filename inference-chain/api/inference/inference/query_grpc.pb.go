@@ -33,6 +33,7 @@ const (
 	Query_EpochGroupValidations_FullMethodName                     = "/inference.inference.Query/EpochGroupValidations"
 	Query_EpochGroupValidationsAll_FullMethodName                  = "/inference.inference.Query/EpochGroupValidationsAll"
 	Query_PocBatchesForStage_FullMethodName                        = "/inference.inference.Query/PocBatchesForStage"
+	Query_PocValidationsForStage_FullMethodName                    = "/inference.inference.Query/PocValidationsForStage"
 	Query_GetCurrentEpoch_FullMethodName                           = "/inference.inference.Query/GetCurrentEpoch"
 	Query_TokenomicsData_FullMethodName                            = "/inference.inference.Query/TokenomicsData"
 	Query_GetUnitOfComputePriceProposal_FullMethodName             = "/inference.inference.Query/GetUnitOfComputePriceProposal"
@@ -118,6 +119,8 @@ type QueryClient interface {
 	EpochGroupValidationsAll(ctx context.Context, in *QueryAllEpochGroupValidationsRequest, opts ...grpc.CallOption) (*QueryAllEpochGroupValidationsResponse, error)
 	// Queries a list of PocBatchesForStage items.
 	PocBatchesForStage(ctx context.Context, in *QueryPocBatchesForStageRequest, opts ...grpc.CallOption) (*QueryPocBatchesForStageResponse, error)
+	// Queries a list of PocValidationsForStage items.
+	PocValidationsForStage(ctx context.Context, in *QueryPocValidationsForStageRequest, opts ...grpc.CallOption) (*QueryPocValidationsForStageResponse, error)
 	// Queries a list of GetCurrentEpoch items.
 	GetCurrentEpoch(ctx context.Context, in *QueryGetCurrentEpochRequest, opts ...grpc.CallOption) (*QueryGetCurrentEpochResponse, error)
 	// Queries a TokenomicsData by index.
@@ -345,6 +348,15 @@ func (c *queryClient) EpochGroupValidationsAll(ctx context.Context, in *QueryAll
 func (c *queryClient) PocBatchesForStage(ctx context.Context, in *QueryPocBatchesForStageRequest, opts ...grpc.CallOption) (*QueryPocBatchesForStageResponse, error) {
 	out := new(QueryPocBatchesForStageResponse)
 	err := c.cc.Invoke(ctx, Query_PocBatchesForStage_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryClient) PocValidationsForStage(ctx context.Context, in *QueryPocValidationsForStageRequest, opts ...grpc.CallOption) (*QueryPocValidationsForStageResponse, error) {
+	out := new(QueryPocValidationsForStageResponse)
+	err := c.cc.Invoke(ctx, Query_PocValidationsForStage_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -882,6 +894,8 @@ type QueryServer interface {
 	EpochGroupValidationsAll(context.Context, *QueryAllEpochGroupValidationsRequest) (*QueryAllEpochGroupValidationsResponse, error)
 	// Queries a list of PocBatchesForStage items.
 	PocBatchesForStage(context.Context, *QueryPocBatchesForStageRequest) (*QueryPocBatchesForStageResponse, error)
+	// Queries a list of PocValidationsForStage items.
+	PocValidationsForStage(context.Context, *QueryPocValidationsForStageRequest) (*QueryPocValidationsForStageResponse, error)
 	// Queries a list of GetCurrentEpoch items.
 	GetCurrentEpoch(context.Context, *QueryGetCurrentEpochRequest) (*QueryGetCurrentEpochResponse, error)
 	// Queries a TokenomicsData by index.
@@ -1027,6 +1041,9 @@ func (UnimplementedQueryServer) EpochGroupValidationsAll(context.Context, *Query
 }
 func (UnimplementedQueryServer) PocBatchesForStage(context.Context, *QueryPocBatchesForStageRequest) (*QueryPocBatchesForStageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PocBatchesForStage not implemented")
+}
+func (UnimplementedQueryServer) PocValidationsForStage(context.Context, *QueryPocValidationsForStageRequest) (*QueryPocValidationsForStageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PocValidationsForStage not implemented")
 }
 func (UnimplementedQueryServer) GetCurrentEpoch(context.Context, *QueryGetCurrentEpochRequest) (*QueryGetCurrentEpochResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCurrentEpoch not implemented")
@@ -1457,6 +1474,24 @@ func _Query_PocBatchesForStage_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(QueryServer).PocBatchesForStage(ctx, req.(*QueryPocBatchesForStageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_PocValidationsForStage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryPocValidationsForStageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).PocValidationsForStage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Query_PocValidationsForStage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).PocValidationsForStage(ctx, req.(*QueryPocValidationsForStageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2531,6 +2566,10 @@ var Query_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PocBatchesForStage",
 			Handler:    _Query_PocBatchesForStage_Handler,
+		},
+		{
+			MethodName: "PocValidationsForStage",
+			Handler:    _Query_PocValidationsForStage_Handler,
 		},
 		{
 			MethodName: "GetCurrentEpoch",

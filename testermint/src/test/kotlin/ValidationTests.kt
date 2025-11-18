@@ -26,10 +26,11 @@ class ValidationTests : TestermintTest() {
                     epochShift = 80
                 ),
             ),
-            reboot = true
+            reboot = true,
+            mergeSpec = ignoreDowntime
         )
 
-        genesis.node.waitForMinimumBlock(35)
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
         logSection("Making inference requests in parallel")
         val requests = 50
         val inferenceRequest = inferenceRequestObject.copy(
@@ -56,7 +57,7 @@ class ValidationTests : TestermintTest() {
     fun `test invalid gets marked invalid`() {
         var tries = 3
         val (cluster, genesis) = initCluster(reboot = true)
-        genesis.waitForNextInferenceWindow()
+        genesis.waitForNextInferenceWindow(10)
         val oddPair = cluster.joinPairs.last()
         val badResponse = defaultInferenceResponseObject.withMissingLogit()
         oddPair.mock?.setInferenceResponse(badResponse)
@@ -220,6 +221,7 @@ class ValidationTests : TestermintTest() {
                     this[InferenceParams::validationParams] = spec<ValidationParams> {
                         this[ValidationParams::minValidationAverage] = Decimal.fromDouble(100.0)
                         this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(100.0)
+                        this[ValidationParams::downtimeHThreshold] = Decimal.fromDouble(100.0)
 
                     }
                     this[InferenceParams::bandwidthLimitsParams] = spec<BandwidthLimitsParams> {
@@ -229,6 +231,25 @@ class ValidationTests : TestermintTest() {
                         this[EpochParams::inferencePruningEpochThreshold] = 100L
                         // need longer epochs to have time for invalidations
 //                        this[EpochParams::epochLength] = 20L
+                    }
+                }
+            }
+        }
+
+        val ignoreDowntime = spec {
+            this[AppState::inference] = spec<InferenceState> {
+                this[InferenceState::params] = spec<InferenceParams> {
+                    this[InferenceParams::validationParams] = spec<ValidationParams> {
+                        this[ValidationParams::minValidationAverage] = Decimal.fromDouble(100.0)
+                        this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(100.0)
+                        this[ValidationParams::downtimeHThreshold] = Decimal.fromDouble(100.0)
+
+                    }
+                    this[InferenceParams::bandwidthLimitsParams] = spec<BandwidthLimitsParams> {
+                        this[BandwidthLimitsParams::minimumConcurrentInvalidations] = 100L
+                    }
+                    this[InferenceParams::epochParams] = spec<EpochParams> {
+                        this[EpochParams::inferencePruningEpochThreshold] = 100L
                     }
                 }
             }

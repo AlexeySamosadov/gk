@@ -66,7 +66,7 @@ func calculateInferenceServingWeight(mlNodes []*types.ModelMLNodes) int64 {
 			}
 
 			// POC_SLOT is at index 1 (second timeslot)
-			// false = serves inference, true = continues inference during confirmation PoC
+			// false => participant in PoC phase, true => continues inference during PoC
 			if len(node.TimeslotAllocation) > 1 && !node.TimeslotAllocation[1] {
 				totalWeight += node.PocWeight
 			}

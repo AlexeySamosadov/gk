@@ -113,6 +113,12 @@ service Query {
 
   }
 
+  // Queries a list of PocValidationsForStage items.
+  rpc PocValidationsForStage (QueryPocValidationsForStageRequest) returns (QueryPocValidationsForStageResponse) {
+    option (google.api.http).get = "/productscience/inference/inference/poc_validations_for_stage/{block_height}";
+
+  }
+
   // Queries a list of GetCurrentEpoch items.
   rpc GetCurrentEpoch (QueryGetCurrentEpochRequest) returns (QueryGetCurrentEpochResponse) {
     option (google.api.http).get = "/productscience/inference/inference/get_current_epoch";
@@ -547,6 +553,21 @@ message PoCBatchesWithParticipants {
            string   pub_key     = 2;
            string   hex_pub_key = 3;
   repeated PoCBatch poc_batch   = 4 [(gogoproto.nullable) = false];
+}
+
+message QueryPocValidationsForStageRequest {
+  int64 block_height = 1;
+}
+
+message QueryPocValidationsForStageResponse {
+  repeated PoCValidationsWithParticipants poc_validation = 1 [(gogoproto.nullable) = false];
+}
+
+message PoCValidationsWithParticipants {
+           string        participant    = 1;
+           string        pub_key        = 2;
+           string        hex_pub_key    = 3;
+  repeated PoCValidation poc_validation = 4 [(gogoproto.nullable) = false];
 }
 
 message QueryGetCurrentEpochRequest {}
