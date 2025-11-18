@@ -8,6 +8,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/cosmos/cosmos-sdk/x/group"
 	"github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -425,14 +426,40 @@ func (eg *EpochGroup) GetComputeResults(ctx context.Context) ([]keeper.ComputeRe
 }
 
 func (eg *EpochGroup) GetGroupMembers(ctx context.Context) ([]*group.GroupMember, error) {
-	members, err := eg.GroupKeeper.GroupMembers(ctx, &group.QueryGroupMembersRequest{
-		GroupId: eg.GroupData.EpochGroupId,
-	})
+	members, err := eg.getAllGroupMembersPaginated(ctx, eg.GroupData.EpochGroupId)
 	if err != nil {
 		eg.Logger.LogError("Error getting group members", types.EpochGroup, "error", err)
 		return nil, err
 	}
-	return members.Members, nil
+	return members, nil
+}
+
+// getAllGroupMembersPaginated fetches all group members using pagination
+func (eg *EpochGroup) getAllGroupMembersPaginated(ctx context.Context, groupId uint64) ([]*group.GroupMember, error) {
+	var allMembers []*group.GroupMember
+	var nextKey []byte
+
+	for {
+		resp, err := eg.GroupKeeper.GroupMembers(ctx, &group.QueryGroupMembersRequest{
+			GroupId: groupId,
+			Pagination: &query.PageRequest{
+				Key:   nextKey,
+				Limit: 100,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		allMembers = append(allMembers, resp.Members...)
+
+		if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
+			break
+		}
+		nextKey = resp.Pagination.NextKey
+	}
+
+	return allMembers, nil
 }
 
 // CreateSubGroup creates a new sub-group for a specific model

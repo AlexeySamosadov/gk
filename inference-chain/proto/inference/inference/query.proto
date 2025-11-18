@@ -604,10 +604,13 @@ message QueryPreviousEpochGroupDataResponse {
   EpochGroupData epoch_group_data = 1 [(gogoproto.nullable) = false];
 }
 
-message QueryModelsAllRequest {}
+message QueryModelsAllRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
 
 message QueryModelsAllResponse {
   repeated Model model = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 
 message QueryGetTopMinerRequest {
