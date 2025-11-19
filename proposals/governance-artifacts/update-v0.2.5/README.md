@@ -71,7 +71,7 @@ The Confirmation PoC parameters are initialized to require 1 Confirmation PoC pe
 ### Native Bridge 
 Commit: [f7470c1eab3ebdda30dda90b0d81131b7b472a64](https://github.com/gonka-ai/gonka/pull/404/commits/168f7a8652260528c56acb25d918e7be5a19beca).
 
-This commit introduces a native bridge for the Ethereum blockchain and contracts for its integration. Details can be found [here](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/proposals/governance-artifacts/update-v0.2.5/bridge.md).
+This commit introduces primitives for native bridge for the Ethereum blockchain and contracts for its integration. Details can be found [here](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/proposals/governance-artifacts/update-v0.2.5/bridge.md).
 
 ---
 
