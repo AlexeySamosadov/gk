@@ -721,6 +721,15 @@ pub fn migrate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)
         .map_err(|e| ContractError::Std(cosmwasm_std::StdError::msg(e.to_string())))?;
 
+    // Update stored native_denom to the correct value from chain
+    // This fixes any incorrect stored values and avoids expensive queries on every execution
+    let mut config = CONFIG.load(deps.storage)?;
+    let correct_native_denom = get_native_denom(deps.as_ref())?;
+    if config.native_denom != correct_native_denom {
+        config.native_denom = correct_native_denom.clone();
+        CONFIG.save(deps.storage, &config)?;
+    }
+
     Ok(Response::new()
         .add_attribute("action", "migrate")
         .add_attribute("from_version", old.version)
