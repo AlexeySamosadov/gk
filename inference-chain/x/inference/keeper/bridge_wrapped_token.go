@@ -21,6 +21,7 @@ type BridgeTokenInstantiateMsg struct {
 	InitialBalances []Balance  `json:"initial_balances"`
 	Mint            *MintInfo  `json:"mint,omitempty"`
 	Marketing       *Marketing `json:"marketing,omitempty"`
+	Admin           *string    `json:"admin,omitempty"`
 }
 
 type Balance struct {
@@ -490,7 +491,7 @@ func (k Keeper) GetOrCreateWrappedTokenContract(ctx sdk.Context, chainId, contra
 
 	// Prepare instantiate message for bridge token contract
 	// Note: name, symbol and decimals will be queried from chain metadata by the contract
-	// Note: admin role will be auto-detected from WASM admin by the contract
+	governanceAddr := k.GetAuthority() // Governance module address for WASM admin
 	instantiateMsg := BridgeTokenInstantiateMsg{
 		ChainId:         chainId,
 		ContractAddress: contractAddress,
@@ -498,6 +499,7 @@ func (k Keeper) GetOrCreateWrappedTokenContract(ctx sdk.Context, chainId, contra
 		Mint: &MintInfo{
 			Minter: k.AccountKeeper.GetModuleAddress(types.ModuleName).String(), // Inference module as minter
 		},
+		Admin: &governanceAddr, // Pass admin explicitly to avoid querying during instantiation
 	}
 
 	msgBz, err := json.Marshal(instantiateMsg)
@@ -506,7 +508,6 @@ func (k Keeper) GetOrCreateWrappedTokenContract(ctx sdk.Context, chainId, contra
 	}
 
 	// Instantiate the CW20 contract
-	governanceAddr := k.GetAuthority() // Governance module address for WASM admin
 	contractAddr, _, err := wasmKeeper.Instantiate(
 		ctx,
 		codeID,
