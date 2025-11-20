@@ -152,8 +152,7 @@ func (c RegisterNode) Execute(b *Broker) {
 		b.nodes[c.Node.Id] = nodeWithState
 
 		// Create and register a worker for this node
-		client := b.NewNodeClient(&node)
-		worker := NewNodeWorkerWithClient(c.Node.Id, nodeWithState, client, b)
+		worker := NewNodeWorker(c.Node.Id, nodeWithState, b)
 		b.nodeWorkGroup.AddWorker(c.Node.Id, worker)
 	}()
 

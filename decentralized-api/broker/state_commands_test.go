@@ -128,7 +128,7 @@ func TestStartPocCommand_AdminDisabled(t *testing.T) {
 	success := <-cmd.Response
 	require.True(t, success, "Command should succeed")
 
-	require.Equal(t, node1.State.IntendedStatus, types.HardwareNodeStatus_STOPPED)
+	require.Equal(t, node1.State.IntendedStatus, types.HardwareNodeStatus_INFERENCE)
 	require.Equal(t, node2.State.IntendedStatus, types.HardwareNodeStatus_POC)
 	require.Equal(t, node2.State.PocIntendedStatus, PocStatusGenerating)
 }

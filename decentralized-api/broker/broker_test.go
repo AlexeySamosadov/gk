@@ -486,26 +486,14 @@ func TestImmediateClientRefreshLogic(t *testing.T) {
 
 	initialStopCalled := mockClient.StopCalled
 
-	// Test the immediate refresh directly - this should call stop on the old client immediately
+	// Dynamic client creation means refresh is effectively a no-op for the HTTP client.
 	worker.RefreshClientImmediate("v3.0.8", "v3.1.0")
+	time.Sleep(10 * time.Millisecond)
+	assert.Equal(t, initialStopCalled, mockClient.StopCalled, "Stop should not be invoked when clients are created per request")
 
-	// Give some time for the async stop call to complete
-	time.Sleep(50 * time.Millisecond)
-
-	// Verify stop was called on the old client
-	assert.Greater(t, mockClient.StopCalled, initialStopCalled, "Stop should have been called on old client")
-
-	// Test the full immediate refresh flow again
-	previousStopCalled := mockClient.StopCalled
-
-	// Call immediate refresh again with different version
 	worker.RefreshClientImmediate("v3.1.0", "v3.2.0")
-
-	// Give some time for async stop calls to complete
-	time.Sleep(50 * time.Millisecond)
-
-	// Should have called stop again
-	assert.Greater(t, mockClient.StopCalled, previousStopCalled, "Stop should have been called again during second refresh")
+	time.Sleep(10 * time.Millisecond)
+	assert.Equal(t, initialStopCalled, mockClient.StopCalled, "Stop should remain unchanged on repeated refreshes")
 }
 
 func TestUpdateNodeConfiguration(t *testing.T) {
