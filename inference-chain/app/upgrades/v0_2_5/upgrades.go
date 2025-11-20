@@ -33,7 +33,11 @@ func CreateUpgradeHandler(
 			return nil, err
 		}
 
+		// Ensure bridge escrow account exists
 		sdkCtx := sdk.UnwrapSDKContext(ctx)
+		k.AccountKeeper.GetModuleAccount(sdkCtx, types.BridgeEscrowAccName)
+		k.Logger().Info("v0.2.5 upgrade: ensured bridge_escrow module account exists")
+
 		if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
 			k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
 		}
