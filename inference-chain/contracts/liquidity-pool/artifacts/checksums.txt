@@ -1,1 +1,1 @@
-1486a9817798631da5b2a4e0e443c1c6b1c202074e9ef4dca25663f0c2193fca  liquidity_pool.wasm
+a633deefe8b204ffc8c1bfda4086344fde94473b31cf7ece569e15cf9d85e71e  liquidity_pool.wasm

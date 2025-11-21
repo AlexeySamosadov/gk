@@ -119,11 +119,57 @@ func (k Keeper) AssignSlots(ctx sdk.Context, participants []types.ParticipantWit
 		}
 	}
 
+	// If we have more non-zero participants than slots, select the top N by weight
 	if nonZeroCount > int(totalSlots) {
-		return nil, fmt.Errorf("cannot assign at least one slot to each non-zero weight participant: %d participants, %d slots", nonZeroCount, totalSlots)
+		// Calculate weight of participants that will be excluded for logging
+		excludedWeight := math.LegacyZeroDec()
+		excludedCount := nonZeroCount - int(totalSlots)
+
+		// Sort by weight descending, then by address for determinism
+		sort.Slice(sortedParticipants, func(i, j int) bool {
+			if sortedParticipants[i].PercentageWeight.Equal(sortedParticipants[j].PercentageWeight) {
+				return sortedParticipants[i].Address < sortedParticipants[j].Address
+			}
+			return sortedParticipants[i].PercentageWeight.GT(sortedParticipants[j].PercentageWeight)
+		})
+
+		// Calculate weight of excluded participants (those beyond totalSlots)
+		for i := int(totalSlots); i < len(sortedParticipants); i++ {
+			excludedWeight = excludedWeight.Add(sortedParticipants[i].PercentageWeight)
+		}
+
+		// Defensive check: verify we can safely slice (should always be true given nonZeroCount > totalSlots)
+		if int(totalSlots) > len(sortedParticipants) {
+			return nil, fmt.Errorf("internal error: totalSlots %d exceeds participant count %d", totalSlots, len(sortedParticipants))
+		}
+
+		// Keep only top totalSlots participants
+		sortedParticipants = sortedParticipants[:totalSlots]
+
+		// Recalculate total weight for the selected participants
+		totalWeight = math.LegacyZeroDec()
+		for _, p := range sortedParticipants {
+			totalWeight = totalWeight.Add(p.PercentageWeight)
+		}
+
+		// Critical safety check: verify totalWeight is not zero after selection
+		if totalWeight.IsZero() {
+			return nil, fmt.Errorf("total weight is zero after participant selection")
+		}
+
+		excludedPercentage := excludedWeight.Quo(totalWeight.Add(excludedWeight)).Mul(math.LegacyNewDec(100))
+
+		k.Logger().Warn(
+			"Participant count exceeds available slots, selected top participants by weight",
+			"original_participant_count", nonZeroCount,
+			"selected_participant_count", totalSlots,
+			"excluded_participant_count", excludedCount,
+			"excluded_weight_percentage", excludedPercentage.String(),
+		)
 	}
 
 	// 3. Allocate floor(ratio * totalSlots) slots to each participant and remember the fractional remainders.
+	// Note: Arrays are sized after potential participant truncation to match final count
 	assigned := make([]int64, len(sortedParticipants))
 	remainders := make([]math.LegacyDec, len(sortedParticipants))
 	assignedTotal := int64(0)

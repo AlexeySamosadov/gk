@@ -7,9 +7,19 @@ import (
 
 	"cosmossdk.io/math"
 	"github.com/productscience/inference/x/inference/types"
+	"golang.org/x/crypto/sha3"
 )
 
 // Bridge signature data helper functions shared between mint and withdrawal operations
+
+// keccak256Hash computes Ethereum-compatible keccak256 hash and returns a fixed 32-byte array
+func keccak256Hash(data []byte) [32]byte {
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write(data)
+	var result [32]byte
+	copy(result[:], hash.Sum(nil))
+	return result
+}
 
 // ethereumAddressToBytes converts an Ethereum hex address string to 20 bytes
 // Handles addresses with or without 0x prefix and preserves case (matching Solidity abi.encodePacked behavior)

@@ -6,6 +6,7 @@ import (
 	upgradetypes "cosmossdk.io/x/upgrade/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
+	blskeeper "github.com/productscience/inference/x/bls/keeper"
 	"github.com/productscience/inference/x/inference/keeper"
 	"github.com/productscience/inference/x/inference/types"
 )
@@ -17,6 +18,7 @@ func CreateUpgradeHandler(
 	mm *module.Manager,
 	configurator module.Configurator,
 	k keeper.Keeper,
+	blsKeeper blskeeper.Keeper,
 ) upgradetypes.UpgradeHandler {
 	return func(ctx context.Context, plan upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
 		k.Logger().Info("starting upgrade to " + UpgradeName)
@@ -31,7 +33,11 @@ func CreateUpgradeHandler(
 			return nil, err
 		}
 
+		// Ensure bridge escrow account exists
 		sdkCtx := sdk.UnwrapSDKContext(ctx)
+		k.AccountKeeper.GetModuleAccount(sdkCtx, types.BridgeEscrowAccName)
+		k.Logger().Info("v0.2.5 upgrade: ensured bridge_escrow module account exists")
+
 		if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
 			k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
 		}

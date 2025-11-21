@@ -13,8 +13,8 @@ import (
 
 // Bridge operation constants (matches BridgeContract.sol)
 var (
-	// WITHDRAW_OPERATION hash - calculated once at package initialization
-	withdrawOperationHash = sha256.Sum256([]byte("WITHDRAW_OPERATION"))
+	// WITHDRAW_OPERATION hash - calculated once at package initialization using keccak256
+	withdrawOperationHash = keccak256Hash([]byte("WITHDRAW_OPERATION"))
 
 	// Chain ID mapping: string identifier → numeric chain ID
 	chainIdMapping = map[string]string{
@@ -55,7 +55,7 @@ func (k msgServer) RequestBridgeWithdrawal(goCtx context.Context, msg *types.Msg
 
 	// 5. Generate request ID from transaction hash
 	requestID := k.generateRequestID(ctx)
-	requestIdHash := sha256.Sum256([]byte(requestID))
+	requestIdHash := keccak256Hash([]byte(requestID))
 
 	// 6. Get current epoch for BLS signature
 	currentEpochGroup, err := k.GetCurrentEpochGroup(goCtx)

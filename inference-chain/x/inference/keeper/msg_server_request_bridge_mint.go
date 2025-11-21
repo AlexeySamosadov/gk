@@ -13,8 +13,8 @@ import (
 
 // Bridge operation constants for native token minting (matches BridgeContract.sol)
 var (
-	// MINT_OPERATION hash - calculated once at package initialization
-	mintOperationHash = sha256.Sum256([]byte("MINT_OPERATION"))
+	// MINT_OPERATION hash - calculated once at package initialization using keccak256
+	mintOperationHash = keccak256Hash([]byte("MINT_OPERATION"))
 
 	// Chain ID mapping for mint operations (same as withdrawal)
 	mintChainIdMapping = map[string]string{
@@ -101,7 +101,7 @@ func (k msgServer) RequestBridgeMint(goCtx context.Context, msg *types.MsgReques
 	// Use the actual Gonka chain ID from context (source chain)
 	gonkaChainID := ctx.ChainID()
 	gonkaChainIdHash := sha256.Sum256([]byte(gonkaChainID)) // Convert to bytes32
-	requestIdHash := sha256.Sum256([]byte(requestID))
+	requestIdHash := keccak256Hash([]byte(requestID))
 
 	signingData := blstypes.SigningData{
 		CurrentEpochId: currentEpochGroup.GroupData.EpochIndex,

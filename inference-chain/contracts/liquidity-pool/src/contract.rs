@@ -50,6 +50,26 @@ pub struct QueryApprovedTokensForTradeResponseProto {
 #[derive(Clone, PartialEq, Message)]
 pub struct EmptyRequest {}
 
+// Proto types for bank TotalSupply query (to get base denom)
+#[derive(Clone, PartialEq, Message)]
+pub struct QueryTotalSupplyRequest {
+    // Pagination is optional and omitted - we just need the first coin
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct QueryTotalSupplyResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub supply: ::prost::alloc::vec::Vec<CoinProto>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct CoinProto {
+    #[prost(string, tag = "1")]
+    pub denom: String,
+    #[prost(string, tag = "2")]
+    pub amount: String,
+}
+
 const CONTRACT_NAME: &str = "inference-liquidity-pool";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -57,7 +77,7 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 // Accepts either a raw CW20 address (bech32) or a value prefixed with "cw20:"
 fn validate_wrapped_token_for_trade(deps: Deps, token_identifier: &str) -> Result<bool, ContractError> {
     deps.api.debug(&format!(
-        "lp: validate_wrapped_token_for_trade start token_identifier={}",
+        "LP: validate_wrapped_token_for_trade start token_identifier={}",
         token_identifier
     ));
 
@@ -66,7 +86,7 @@ fn validate_wrapped_token_for_trade(deps: Deps, token_identifier: &str) -> Resul
         .strip_prefix("cw20:")
         .unwrap_or(token_identifier);
     deps.api.debug(&format!(
-        "lp: extracted cw20 contract_address={}",
+        "LP: extracted cw20 contract_address={}",
         contract_address
     ));
 
@@ -74,7 +94,7 @@ fn validate_wrapped_token_for_trade(deps: Deps, token_identifier: &str) -> Resul
     let request = QueryValidateWrappedTokenForTradeRequest {
         contract_address: contract_address.to_string(),
     };
-    deps.api.debug("lp: issuing query_grpc for ValidateWrappedTokenForTrade");
+    deps.api.debug("LP: issuing query_grpc for ValidateWrappedTokenForTrade");
     let response: QueryValidateWrappedTokenForTradeResponse = query_proto(
         deps,
         "/inference.inference.Query/ValidateWrappedTokenForTrade",
@@ -82,24 +102,37 @@ fn validate_wrapped_token_for_trade(deps: Deps, token_identifier: &str) -> Resul
     )
     .map_err(|e| ContractError::Std(e))?;
     deps.api.debug(&format!(
-        "lp: ValidateWrappedTokenForTrade response is_valid={}",
+        "LP: ValidateWrappedTokenForTrade response is_valid={}",
         response.is_valid
     ));
 
     Ok(response.is_valid)
 }
 
-// Helper function to get native denomination from staking module
+// Helper function to get native denomination from bank module
 fn get_native_denom(deps: Deps) -> Result<String, ContractError> {
-    // Query the staking module for the bond denomination
-    let query = QueryRequest::Staking(StakingQuery::BondedDenom {});
+    // Query the bank module's total supply to get the base/native denomination
+    // The first coin in total supply is typically the native/base denom
+    let request = QueryTotalSupplyRequest {};
     
-    // Try to query the staking module, but fall back to "nicoin" if it fails
-    match deps.querier.query::<String>(&query) {
-        Ok(denom) if !denom.is_empty() => Ok(denom),
-        _ => {
-            // In test environments or chains without staking, use nicoin as default
-            Ok("nicoin".to_string())
+    match query_proto::<QueryTotalSupplyRequest, QueryTotalSupplyResponse>(
+        deps,
+        "/cosmos.bank.v1beta1.Query/TotalSupply",
+        &request,
+    ) {
+        Ok(response) => {
+            // Get the first coin from total supply, which is the native/base denom
+            if let Some(coin) = response.supply.first() {
+                if !coin.denom.is_empty() {
+                    return Ok(coin.denom.clone());
+                }
+            }
+            // Fall back to default if supply is empty or denom is empty
+            Ok("ngonka".to_string())
+        },
+        Err(_) => {
+            // Fall back to default if query fails
+            Ok("ngonka".to_string())
         }
     }
 }
@@ -227,7 +260,7 @@ fn receive_cw20(
     cw20_msg: Cw20ReceiveMsg,
 ) -> Result<Response, ContractError> {
     deps.api.debug(&format!(
-        "lp: receive_cw20 start from_cw20={} buyer={} amount={} msg_len={}",
+        "LP: receive_cw20 start from_cw20={} buyer={} amount={} msg_len={}",
         info.sender,
         cw20_msg.sender,
         cw20_msg.amount,
@@ -243,21 +276,21 @@ fn receive_cw20(
     // The sender (info.sender) is the CW20 contract address
     let cw20_contract = info.sender.to_string();
     deps.api.debug(&format!(
-        "lp: validating wrapped token via chain for cw20={}",
+        "LP: validating wrapped token via chain for cw20={}",
         cw20_contract
     ));
     
     // CRITICAL: Validate this is a legitimate bridge token for trading by checking the cosmos module
     if !validate_wrapped_token_for_trade(deps.as_ref(), &cw20_contract)? {
-        deps.api.debug("lp: validate_wrapped_token_for_trade returned false");
+        deps.api.debug("LP: validate_wrapped_token_for_trade returned false");
         return Err(ContractError::TokenNotAccepted {
             token: format!("CW20 contract {} is not a legitimate bridge token approved for trading", cw20_contract),
         });
     }
-    deps.api.debug("lp: validate_wrapped_token_for_trade returned true");
+    deps.api.debug("LP: validate_wrapped_token_for_trade returned true");
 
     // Parse the message to determine what action to take
-    deps.api.debug("lp: parsing inner purchase msg");
+    deps.api.debug("LP: parsing inner purchase msg");
     let _purchase_msg: PurchaseTokenMsg = from_json(&cw20_msg.msg)?;
     
     // The actual sender of the tokens (the user)
@@ -292,7 +325,7 @@ fn receive_cw20(
     // Verify we can spend ALL the USD received (no partial spending allowed)
     if actual_usd_to_spend != usd_value {
         deps.api.debug(&format!(
-            "lp: Cannot spend full USD amount - requested: {}, can spend: {}",
+            "LP: Cannot spend full USD amount - requested: {}, can spend: {}",
             usd_value, actual_usd_to_spend
         ));
         // This shouldn't happen with proper multi-tier calculation, but safety check
@@ -338,7 +371,7 @@ fn receive_cw20(
     let usd_amount_to_track = usd_value;
 
     // Check contract balance
-    deps.api.debug("lp: querying contract native balance");
+    deps.api.debug("LP: querying contract native balance");
     let contract_balance = deps
         .querier
         .query_balance(env.contract.address.to_string(), config.native_denom.as_str())?;
@@ -397,15 +430,15 @@ fn receive_cw20(
         )?;
         response = response.add_message(transfer_cw20_msg);
         deps.api.debug(&format!(
-            "lp: forwarding CW20 tokens to governance admin={} amount={}",
+            "LP: forwarding CW20 tokens to governance admin={} amount={}",
             updated_config.admin,
             token_amount
         ));
     } else {
-        deps.api.debug("lp: no admin set, CW20 tokens remain in contract");
+        deps.api.debug("LP: no admin set, CW20 tokens remain in contract");
     }
 
-    deps.api.debug("lp: building success response with native send and CW20 forward");
+    deps.api.debug("LP: building success response with native send and CW20 forward");
     
     Ok(response
         .add_attribute("method", "purchase_with_wrapped_token")
@@ -687,6 +720,15 @@ pub fn migrate(
 
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)
         .map_err(|e| ContractError::Std(cosmwasm_std::StdError::msg(e.to_string())))?;
+
+    // Update stored native_denom to the correct value from chain
+    // This fixes any incorrect stored values and avoids expensive queries on every execution
+    let mut config = CONFIG.load(deps.storage)?;
+    let correct_native_denom = get_native_denom(deps.as_ref())?;
+    if config.native_denom != correct_native_denom {
+        config.native_denom = correct_native_denom.clone();
+        CONFIG.save(deps.storage, &config)?;
+    }
 
     Ok(Response::new()
         .add_attribute("action", "migrate")

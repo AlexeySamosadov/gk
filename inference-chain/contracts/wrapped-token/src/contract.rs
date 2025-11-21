@@ -39,16 +39,24 @@ pub fn instantiate(
     CREATOR.save(deps.storage, &info.sender)?;
     
     // Save admin (WASM admin = governance module) - controls marketing and metadata
-    // Query contract info to get the WASM admin
-    let contract_info = deps.querier.query_wasm_contract_info(&env.contract.address)?;
-    let admin_addr = contract_info.admin.unwrap_or(info.sender.clone());
+    // Use admin from message if provided, otherwise try to query contract info,
+    // falling back to sender if query fails (contract not registered yet during instantiation)
+    let admin_addr = if let Some(admin_str) = &msg.admin {
+        deps.api.addr_validate(admin_str)?
+    } else {
+        match deps.querier.query_wasm_contract_info(&env.contract.address) {
+            Ok(contract_info) => contract_info.admin.unwrap_or(info.sender.clone()),
+            Err(_) => {
+                // During instantiation, the contract may not be queryable yet
+                // Fall back to sender - the actual admin will be set by the chain
+                info.sender.clone()
+            }
+        }
+    };
     ADMIN.save(deps.storage, &admin_addr)?;
     
     // Persist bridge info (extra state)
     BRIDGE_INFO.save(deps.storage, &BridgeInfo { chain_id: msg.chain_id.clone(), contract_address: msg.contract_address.clone() })?;
-
-    // Initialize internal admin to the instantiator address
-    ADMIN.save(deps.storage, &info.sender)?;
 
     // Map our instantiate to cw20-base InstantiateMsg (use placeholders if needed)
     let cw20_init = cw20_base_msg::InstantiateMsg {
