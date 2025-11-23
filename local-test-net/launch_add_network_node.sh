@@ -44,7 +44,7 @@ fi
 project_name="$KEY_NAME"
 
 docker compose -p "$project_name" down -v
-docker run --rm -v "$(pwd):/workdir" -w /workdir alpine:latest rm -rf "prod-local/$project_name" 2>/dev/null || true
+docker run --rm -v "$(pwd):/workdir" -w /workdir alpine:3.19 rm -rf "prod-local/$project_name" 2>/dev/null || true
 
 echo "project_name=$project_name"
 
