@@ -198,7 +198,7 @@ build-windows-docker:
 	@docker run --rm --platform linux/amd64 \
 		-v "$(PWD)":/workspace \
 		-w /workspace \
-		golang:1.23-bullseye \
+		golang:1.24-bullseye \
 		bash -c '\
 			echo "Installing mingw-w64..." && \
 			apt-get update -qq && apt-get install -y -qq gcc-mingw-w64 && \
@@ -213,7 +213,7 @@ build-linux-docker:
 	@docker run --rm --platform linux/amd64 \
 		-v "$(PWD)":/workspace \
 		-w /workspace \
-		golang:1.23-alpine \
+		golang:1.24-alpine \
 		sh -c '\
 			echo "Installing dependencies..." && \
 			apk add --no-cache gcc musl-dev curl && \
@@ -230,7 +230,7 @@ build-linux-docker:
 	@docker run --rm --platform linux/arm64 \
 		-v "$(PWD)":/workspace \
 		-w /workspace \
-		golang:1.23-alpine \
+		golang:1.24-alpine \
 		sh -c '\
 			echo "Installing dependencies..." && \
 			apk add --no-cache gcc musl-dev curl && \

@@ -130,11 +130,11 @@ func TestSingleNode(t *testing.T) {
 		t.Fatalf("expected node1, got nil")
 	}
 	if runningNode.Id != node.Id {
-		t.Fatalf("expected node1, got: " + runningNode.Id)
+		t.Fatalf("expected node1, got: %s", runningNode.Id)
 	}
 	queueMessage(t, broker, LockAvailableNode{Model: "model1", Response: availableNode})
 	if <-availableNode != nil {
-		t.Fatalf("expected nil, got " + runningNode.Id)
+		t.Fatalf("expected nil, got %s", runningNode.Id)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestNodeRemoval(t *testing.T) {
 		t.Fatalf("expected node1, got nil")
 	}
 	if runningNode.Id != node.Id {
-		t.Fatalf("expected node1, got: " + runningNode.Id)
+		t.Fatalf("expected node1, got: %s", runningNode.Id)
 	}
 	release := make(chan bool, 2)
 	queueMessage(t, broker, RemoveNode{node.Id, release})
@@ -294,7 +294,7 @@ func TestMultipleNodes(t *testing.T) {
 	}
 	println("First Node: " + firstNode.Id)
 	if firstNode.Id != node1.Id && firstNode.Id != node2.Id {
-		t.Fatalf("expected node1 or node2, got: " + firstNode.Id)
+		t.Fatalf("expected node1 or node2, got: %s", firstNode.Id)
 	}
 	queueMessage(t, broker, LockAvailableNode{Model: "model1", Response: availableNode})
 	secondNode := <-availableNode
@@ -303,14 +303,14 @@ func TestMultipleNodes(t *testing.T) {
 	}
 	println("Second Node: " + secondNode.Id)
 	if secondNode.Id == firstNode.Id {
-		t.Fatalf("expected different node from 1, got: " + secondNode.Id)
+		t.Fatalf("expected different node from 1, got: %s", secondNode.Id)
 	}
 }
 
 func queueMessage(t *testing.T, broker *Broker, command Command) {
 	err := broker.QueueMessage(command)
 	if err != nil {
-		t.Fatalf("error sending message" + err.Error())
+		t.Fatalf("error sending message: %v", err)
 	}
 }
 
@@ -364,11 +364,11 @@ func TestRoundTripSegment(t *testing.T) {
 		t.Fatalf("expected node1, got nil")
 	}
 	if runningNode.Id != node.Id {
-		t.Fatalf("expected node1, got: " + runningNode.Id)
+		t.Fatalf("expected node1, got: %s", runningNode.Id)
 	}
 	if runningNode.InferenceSegment != node.InferenceSegment {
 		slog.Warn("Inference segment not matching", "expected", node, "got", runningNode)
-		t.Fatalf("expected inference segment /is, got: " + runningNode.InferenceSegment)
+		t.Fatalf("expected inference segment /is, got: %s", runningNode.InferenceSegment)
 	}
 }
 
