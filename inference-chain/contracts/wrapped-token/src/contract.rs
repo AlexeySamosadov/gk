@@ -33,7 +33,9 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    // Note: We don't set_contract_version here because cw20_base_contract::instantiate
+    // will set it to "crates.io:cw20-base". Our migrate function handles this by
+    // allowing migration from both "wrapped-token" and "crates.io:cw20-base".
     
     // Save creator (instantiator = inference module) - controls operations
     CREATOR.save(deps.storage, &info.sender)?;
@@ -284,9 +286,11 @@ pub fn migrate(
 ) -> Result<Response, ContractError> {
     let old = get_contract_version(deps.storage)
         .map_err(|e| ContractError::Std(StdError::generic_err(e.to_string())))?;
-    if old.contract != CONTRACT_NAME {
+    
+    // Allow migration from both cw20-base (legacy) and wrapped-token contracts
+    if old.contract != CONTRACT_NAME && old.contract != "crates.io:cw20-base" {
         return Err(ContractError::Std(StdError::generic_err(format!(
-            "wrong contract: expected {} got {}",
+            "wrong contract: expected {} or crates.io:cw20-base, got {}",
             CONTRACT_NAME, old.contract
         ))));
     }
@@ -296,6 +300,7 @@ pub fn migrate(
 
     Ok(Response::new()
         .add_attribute("action", "migrate")
+        .add_attribute("from_contract", old.contract)
         .add_attribute("from_version", old.version)
         .add_attribute("to_version", CONTRACT_VERSION))
 }
