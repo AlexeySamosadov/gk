@@ -100,13 +100,32 @@ HARDHAT_NETWORK=mainnet node withdraw-tokens.js \
   "AAAAAAAAAAAAAAAAAAAAAAYc935pphgsWzRMEvsnf54X4AcjoWWkhgmi0chllDHMFcMxSpMIVGa48ARlGx9+RgAAAAAAAAAAAAAAAAAAAAAWf5RR5Pawp0ZSy4QHnHqdflD0fT0yr6zJ83z2ZARJyRgd56robaSWdyo4Pj1Ca2Y=" # Signature
 ```
 
+
+# Mint (examples have another outdated contract)
+
+Similar but:
+
 ```
-HARDHAT_NETWORK=mainnet node withdraw-tokens.js \
-  0xEf3BBA27779C4b08b3b3534407113747d6601180 \
-  135 \
-  "vSTWiN1pvooxcFoDLzePCEq3x/C5NQ+jFMvfcEozCm4=" \
-  "0x8BF9D25F9a63764A52Bcbf8E742a475b38D3838c" \
-  0xdac17f958d2ee523a2206206994597c13d831ec7 \
-  190000 \
-  "AAAAAAAAAAAAAAAAAAAAAAYc935pphgsWzRMEvsnf54X4AcjoWWkhgmi0chllDHMFcMxSpMIVGa48ARlGx9+RgAAAAAAAAAAAAAAAAAAAAAWf5RR5Pawp0ZSy4QHnHqdflD0fT0yr6zJ83z2ZARJyRgd56robaSWdyo4Pj1Ca2Y="
+./inferenced tx inference request-bridge-mint \
+    1000000000 \
+    "0xEeC5Ca4286A5A16Ea87C0612c55F73DD982a36C6" \
+    "ethereum" \
+    --from testnet \
+    --keyring-backend file \
+    --chain-id gonka-mainnet \
+    --node http://89.169.111.79:8000/chain-rpc/ \
+    --gas auto \
+    --gas-adjustment 1.3 \
+    --yes
+```
+
+And accordinly:
+
+
+```bash
+HARDHAT_NETWORK=mainnet node mint-wgnk.js 0xEf3BBA27779C4b08b3b3534407113747d6601180 5 \
+  TCjLmj/TXQtQzM8SLLKcOB1NUidAHLi1+SrHhTj4B34= \
+  0xEeC5Ca4286A5A16Ea87C0612c55F73DD982a36C6 \
+  1000000000 \
+  AAAAAAAAAAAAAAAAAAAAAAaT1+fAtBplGOY8GLdhwfs0rC0qte+hrsPzbTTGKtjsW1IePQ3QmxFk7EufUNK8YgAAAAAAAAAAAAAAAAAAAAAXEuDg+U9cQzv9YKsWQXGfP1ljBECkZCv3HxrYlk6DsukefcYqyGkPsF6z8S6qH+Q=
 ```
