@@ -204,6 +204,19 @@ fn withdraw(
     Ok(resp)
 }
 
+// Proto message for MsgRequestBridgeWithdrawal
+#[derive(Clone, PartialEq, ProstMessage)]
+pub struct MsgRequestBridgeWithdrawal {
+    #[prost(string, tag = "1")]
+    pub creator: String,
+    #[prost(string, tag = "2")]
+    pub user_address: String,
+    #[prost(string, tag = "3")]
+    pub amount: String,
+    #[prost(string, tag = "4")]
+    pub destination_address: String,
+}
+
 // Helper function to create the bridge withdrawal message
 fn create_bridge_withdrawal_msg(
     creator: String,
@@ -211,16 +224,22 @@ fn create_bridge_withdrawal_msg(
     amount: String,
     destination_address: String,
 ) -> Result<CosmosMsg, ContractError> {
-    // For now, we'll create a custom message that can be handled by the inference module
-    // This should be properly protobuf encoded in a production environment
-    let msg_data = format!(
-        "{{\"creator\":\"{}\",\"user_address\":\"{}\",\"amount\":\"{}\",\"destination_address\":\"{}\"}}",
-        creator, user_address, amount, destination_address
-    );
+    // Create the protobuf message
+    let msg = MsgRequestBridgeWithdrawal {
+        creator,
+        user_address,
+        amount,
+        destination_address,
+    };
+
+    // Encode the message as protobuf
+    let mut buf = Vec::new();
+    msg.encode(&mut buf)
+        .map_err(|e| ContractError::Std(StdError::generic_err(format!("Failed to encode withdrawal message: {}", e))))?;
 
     let stargate_msg = CosmosMsg::Any(cosmwasm_std::AnyMsg {
         type_url: "/inference.inference.MsgRequestBridgeWithdrawal".to_string(),
-        value: Binary::from(msg_data.as_bytes()),
+        value: Binary::from(buf),
     });
 
     Ok(stargate_msg)
