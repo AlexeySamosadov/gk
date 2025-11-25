@@ -9,7 +9,7 @@ pub struct InstantiateMsg {
     pub buyer: String,
     /// Accepted CW20 contract address (W(USDT) bridge token)
     pub accepted_cw20: String,
-    /// Fixed price per token in USD (6 decimals, e.g., 25000 = $0.025)
+    /// Fixed price per 1 GNK in micro-USD (6 decimals, e.g., 25000 = $0.025/GNK)
     pub price_usd: Uint128,
 }
 

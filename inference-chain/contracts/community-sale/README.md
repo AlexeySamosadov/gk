@@ -11,7 +11,7 @@ Fixed-price exchange of W(USDT) for GNK. Accepts payments only from a designated
 - `admin` - receives W(USDT), can withdraw unsold GNK (typically governance module)
 - `buyer` - only address allowed to purchase
 - `accepted_cw20` - W(USDT) contract address (CW20 wrapped token)
-- `price_usd` - fixed price per GNK token (6 decimals, e.g., 25000 = $0.025)
+- `price_usd` - fixed price per 1 GNK in micro-USD (6 decimals, e.g., 25000 = $0.025/GNK)
 
 ## Deployment
 
@@ -51,7 +51,7 @@ Parameters:
 - `admin` - governance module address (`gonka10d07y265gmmuvt4z0w9aw880jnsr700j2h5m33`) receives W(USDT)
 - `buyer` - designated buyer address (only this address can purchase)
 - `accepted_cw20` - W(USDT) CW20 contract address
-- `price_usd` - price in micro-USD (25000 = $0.025)
+- `price_usd` - price per 1 GNK in micro-USD (25000 = $0.025/GNK)
 - `--admin` flag - WASM migration admin (set to governance for upgrades via proposals)
 
 ### 4. Fund the contract with GNK
