@@ -178,7 +178,6 @@ class Worker(multiprocessing.Process):
                 logger.info(f"[{self.id}] Validating batch {idx} / {len(merged_batches)}")
                 try:
                     validated_batch = self.compute.validate(batch)
-                    logger.info(f"[{self.id}] Validated batch: {validated_batch}")
                     self.validated_batch_queue.put(validated_batch, timeout=10)
                 except Exception as e:
                     logger.error(f"[{self.id}] Validation failed: {e}\n{batch}")
