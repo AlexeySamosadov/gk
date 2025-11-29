@@ -1,0 +1,84 @@
+package payloadstorage
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+)
+
+type storedPayload struct {
+	PromptPayload   string `json:"prompt_payload"`
+	ResponsePayload string `json:"response_payload"`
+}
+
+// Directory structure: {baseDir}/{epochId}/{inferenceId}.json
+type FileStorage struct {
+	baseDir string
+}
+
+func NewFileStorage(baseDir string) *FileStorage {
+	return &FileStorage{baseDir: baseDir}
+}
+
+// Atomic write: temp file + rename
+func (f *FileStorage) Store(ctx context.Context, inferenceId string, epochId uint64, promptPayload, responsePayload string) error {
+	epochDir := filepath.Join(f.baseDir, strconv.FormatUint(epochId, 10))
+	if err := os.MkdirAll(epochDir, 0755); err != nil {
+		return fmt.Errorf("create epoch dir: %w", err)
+	}
+
+	payload := storedPayload{
+		PromptPayload:   promptPayload,
+		ResponsePayload: responsePayload,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	targetPath := filepath.Join(epochDir, inferenceId+".json")
+	tempPath := targetPath + ".tmp"
+
+	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+		return fmt.Errorf("write temp file: %w", err)
+	}
+
+	if err := os.Rename(tempPath, targetPath); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("rename to target: %w", err)
+	}
+
+	return nil
+}
+
+func (f *FileStorage) Retrieve(ctx context.Context, inferenceId string, epochId uint64) (string, string, error) {
+	filePath := filepath.Join(f.baseDir, strconv.FormatUint(epochId, 10), inferenceId+".json")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", "", ErrNotFound
+		}
+		return "", "", fmt.Errorf("read file: %w", err)
+	}
+
+	var payload storedPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return "", "", fmt.Errorf("unmarshal payload: %w", err)
+	}
+	return payload.PromptPayload, payload.ResponsePayload, nil
+}
+
+func (f *FileStorage) PruneEpoch(ctx context.Context, epochId uint64) error {
+	epochDir := filepath.Join(f.baseDir, strconv.FormatUint(epochId, 10))
+	if err := os.RemoveAll(epochDir); err != nil {
+		return fmt.Errorf("remove epoch dir: %w", err)
+	}
+	return nil
+}
+
+var _ PayloadStorage = (*FileStorage)(nil)
+

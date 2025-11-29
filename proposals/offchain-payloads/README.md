@@ -123,13 +123,12 @@ Hash computation and verification in application layer.
 
 **Implementation Phases:**
 1. **Storage Layer** - Executor storage module for payloads, file-based backend, unit tests
-2. **TA→Executor Communication** - Transfer agent sends prompt to executor REST API, executor stores locally
-3. **Dual Write** - Store payloads both on-chain and locally, verify consistency
-4. **Signature Migration** - Update signature to use `prompt_hash` instead of `original_prompt`, support both old and new
-5. **Validator Retrieval** - Implement payload serving endpoints for validators, fallback to on-chain for old inferences
-6. **Validation Migration** - Validators use REST API primary, on-chain fallback only for old inferences
-7. **Chain Migration** - Remove all payload fields from transactions and state
-8. **Cleanup** - Remove on-chain payload storage from `Inference` proto
+2. **Dual Write** - TA sends prompts to executor REST API, store payloads both on-chain and locally, verify consistency
+3. **Signature Migration** - Migrate to signing hashes: user signs `hash(original_prompt)` (TA verifies), TA signs `hash(prompt)` (executor verifies)
+4. **Validator Retrieval** - Implement payload serving endpoints for validators, fallback to on-chain for old inferences
+5. **Validation Migration** - Validators use REST API primary, on-chain fallback for old inferences, vote for invalidation if executor unavailable after retry window (~20m)
+6. **Chain Migration** - Remove all payload fields from transactions, state, and `Inference` proto
+7. **Invalidation Proof Endpoint** - Endpoint for validators to submit executor's signed payload as proof when hash mismatch detected (fast invalidation without voting)
 
 Feature flags control phase activation. Each phase independently testable with rollback capability.
 
