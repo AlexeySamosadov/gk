@@ -6,48 +6,85 @@ All inference prompts and response artifacts are currently stored on-chain. Vali
 
 **Current bandwidth consumption:**
 - Block size limit: 22MB
-- Input tokens: ~0.0023 KB/token mean, ~0.0037 KB/token P90
-- Output tokens: ~0.64 KB/token mean, ~0.71 KB/token P90 due to top-k=5 logprobs
-- Typical payload: 1000 input + 150 output tokens = ~102 KB
+- Typical payload: 1000 input + 150 output tokens = ~102 KB total
+  - Input: ~0.0023 KB/token mean
+  - Output: ~0.64 KB/token mean due to top-k=5 logprobs
 - Current throughput: ~42 requests/second average, ~18 requests/second P90
 - Bandwidth constrains inference throughput significantly below compute capacity
 
+**After offchain payloads:**
+- Transaction size: ~500 bytes (hashes + metadata only)
+- ~200x reduction per inference
+- Bandwidth no longer bottleneck
+
 **Transaction structure:**
-- `MsgStartInference`: stores full prompt payload
-- `MsgFinishInference`: stores full response with tokens and logprobs
-- `Inference` state: retains both payloads until epoch pruning
+- `MsgStartInference`: `prompt_hash`, metadata
+- `MsgFinishInference`: `response_hash`, metadata
+- `Inference` state: only hashes and metadata, payloads stored offchain
+- Validators retrieve `prompt_payload` and `response_payload` offchain for validation
+
+**Signature verification:** 
+Both user and transfer agent sign `prompt_hash` instead of full payload:
+- User signature: `prompt_hash + timestamp + transfer_address`
+- Transfer agent signature: `prompt_hash + timestamp + transfer_address + executor_address`
+
+Chain verifies both signatures on-chain using only hash. User maintains cryptographic commitment to their request. More secure and standard practice than signing full payload.
 
 ## Proposal
 
-Move prompt and response payloads off-chain while preserving validation integrity through peer-to-peer retrieval with cryptographic verification.
+Move validation payloads offchain while preserving validation integrity and signature verification.
+
+**What goes offchain:**
+- `prompt_payload`: Canonical JSON with seed and modifications needed for validation
+- `response_payload`: Full response with output tokens and top-k=5 logprobs
+- `original_prompt`: Original request body no longer needed on-chain
+
+**What stays on-chain:**
+- `prompt_hash` and `response_hash`: SHA256 hashes for cryptographic commitment
+- Token counts, timestamps, addresses, metadata
 
 **Storage:**
 - Local storage on each node, organized by epoch for efficient pruning
 - File-based initially, interface supports future PostgreSQL backend
-- Only metadata stored on-chain: hashes, token counts, timestamps
+
+**Execution flow:**
+1. User computes `prompt_hash`, signs it with their key, sends request to transfer agent REST API
+2. Transfer agent assigns executor, sends `prompt_payload` to executor via REST API
+3. Transfer agent signs `prompt_hash` + timestamp + addresses with their key
+4. Transfer agent broadcasts `MsgStartInference` with hash, metadata, and both signatures
+5. Chain verifies both user and transfer agent signatures over `prompt_hash`
+6. Executor validates `prompt_payload` matches `prompt_hash` from chain/TA before execution to prevent processing invalid requests
+7. Executor runs inference, stores both `prompt_payload` and `response_payload` locally
+8. Executor computes `response_hash`, broadcasts `MsgFinishInference` with hash and metadata
 
 **Validation flow:**
-1. Executor stores payload locally, broadcasts `MsgFinishInference` with metadata and hash
-2. Validator requests payload from executor's REST API endpoint
-3. Validator verifies hash matches on-chain commitment before validating
-4. On timeout or hash mismatch, validator initiates voting for invalidation
+1. Validator requests both payloads from executor's REST API endpoint
+2. Validator verifies both hashes match on-chain commitments
+3. Validator re-runs inference with `prompt_payload` and enforced tokens for validation
+4. On hash mismatch, validator submits invalidation transaction with executor's signed payload as proof (no voting required)
+5. On payload unavailability (timeout/refusal), validator retries for defined period (e.g. 20m). If still unavailable, initiates voting for invalidation
+
+**User impact:** Client SDK must compute `prompt_hash` and sign hash instead of full payload. REST API endpoint unchanged. Users using SDK will see no behavioral change, just updated SDK version required.
 
 **Authentication protocol:**
-- Validator request: `inferenceId` + `timestamp` signed by warm key, timestamp prevents replay attacks
-- Model-based authorization: only participants serving same model can sign valid requests
-- Executor response: `inferenceId` + `payload` signed by warm key
-- Signature provides non-repudiable proof for invalidation without voting
+- TA→Executor (prompt submission): TA signs `inferenceId` + `prompt_payload` + `timestamp` with warm key
+- Validator→Executor (payload retrieval): Validator signs `inferenceId` + `timestamp` with warm key
+- Model-based authorization: only participants serving same model can submit/request payloads
+- Participant verification: Executor verifies signer is an active participant (Validator/TA) in the current epoch
+- Timestamp prevents replay attacks (reject requests >60s old)
+- Executor response: `inferenceId` + payloads signed by warm key
+- Executor signature provides non-repudiable proof for invalidation without voting
 - Uses existing SECP256K1 signature infrastructure
 
 **Future optimization:** Transaction batching in Phase 2 to further reduce overhead by batching multiple inferences per transaction.
 
 ## Security Analysis
 
-**1. Payload Withholding Attack:**
-Executor commits hash but refuses to serve payload. After timeout, validator initiates voting for invalidation. Economic incentive ensures executor serves payload to receive payment. Residual risk: minor validator resource waste.
+**1. Payload Unavailability (Withholding):**
+Executor commits hash but fails to serve payload (timeout or refusal). Validator attempts retrieval for a defined window (e.g., 20 minutes) to rule out temporary network issues. If still unavailable, validator initiates voting for invalidation. Unavailability is treated as a validity failure since validators cannot verify work.
 
 **2. Wrong Payload Attack:**
-Executor serves payload mismatching committed hash. Validator detects hash mismatch, submits executor's signed payload as cryptographic proof for immediate banning without voting. Warm keys must remain stable during epoch for accountability.
+Executor serves payload mismatching committed hash. Validator detects hash mismatch and submits executor's signed payload as cryptographic proof for immediate invalidation without voting. Warm keys must remain stable during epoch for accountability.
 
 **3. Hash Collision Attack:**
 SHA256 collision resistance makes finding alternate payload with same hash cryptographically infeasible. Negligible risk.
@@ -60,10 +97,18 @@ Request signature includes timestamp. Executor rejects requests with timestamps 
 ## Implementation
 
 **Affected Components:**
-- `decentralized-api`: Storage layer, REST API endpoints, payload retrieval
-- `inference-chain`: Transaction protos, signature verification
-- `mlnode`: Payload serving interface
-- `testermint`: Integration tests for retrieval scenarios
+- `decentralized-api`: 
+  - Transfer agent: Send prompts to executor REST API before broadcasting transaction
+  - Executor: Storage layer for payloads, REST API endpoints for receiving prompts and serving payloads
+  - Validator: Payload retrieval from executor REST API
+- `inference-chain`: Transaction protos remove all payload fields, signature verification uses hash instead of full payload
+- `mlnode`: Executor stores both payloads after inference
+- `testermint`: Integration tests for offchain p2p communication between TA→Executor and Validator→Executor
+
+**Key changes:**
+- Transfer agent must send prompt to executor via REST before broadcasting transaction
+- Signature uses `prompt_hash` instead of `original_prompt`: `SHA256(prompt_hash + timestamp + addresses)`
+- All payload data eliminated from transactions
 
 **Storage Interface:**
 ```
@@ -77,12 +122,14 @@ File-based implementation: `storage/{epochId}/{inferenceId}.json`
 Hash computation and verification in application layer.
 
 **Implementation Phases:**
-1. **Storage Layer** - Create storage module, file-based backend, unit tests
-2. **Dual Write** - Store payloads on-chain and locally, verify consistency
-3. **REST API Retrieval** - Implement serving endpoint and validator retrieval, fallback to on-chain
-4. **Validation Migration** - REST API primary, on-chain fallback for old inferences only
-5. **Chain Migration** - Remove payload fields from transactions, keep only metadata
-6. **Cleanup** - Remove on-chain payload fields from state for new inferences
+1. **Storage Layer** - Executor storage module for payloads, file-based backend, unit tests
+2. **TA→Executor Communication** - Transfer agent sends prompt to executor REST API, executor stores locally
+3. **Dual Write** - Store payloads both on-chain and locally, verify consistency
+4. **Signature Migration** - Update signature to use `prompt_hash` instead of `original_prompt`, support both old and new
+5. **Validator Retrieval** - Implement payload serving endpoints for validators, fallback to on-chain for old inferences
+6. **Validation Migration** - Validators use REST API primary, on-chain fallback only for old inferences
+7. **Chain Migration** - Remove all payload fields from transactions and state
+8. **Cleanup** - Remove on-chain payload storage from `Inference` proto
 
 Feature flags control phase activation. Each phase independently testable with rollback capability.
 
