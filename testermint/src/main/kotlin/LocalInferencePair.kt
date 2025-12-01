@@ -314,7 +314,8 @@ data class LocalInferencePair(
         timestamp: Long = Instant.now().toEpochNanos(),
         taAddress: String = node.getColdAddress(),
     ): OpenAIResponse {
-        val signature = node.signPayload(request, account, timestamp = timestamp, endpointAccount = taAddress)
+        // Phase 3: Use signRequest to auto-hash the request
+        val signature = node.signRequest(request, account, timestamp = timestamp, endpointAccount = taAddress)
         val address = node.getColdAddress()
         return api.makeInferenceRequest(request, address, signature, timestamp)
     }

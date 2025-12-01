@@ -174,14 +174,17 @@ class DynamicPricingTest : TestermintTest() {
         logSection("Submit raw StartInference")
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(
+        // Phase 3: Dev signs hash of original_prompt
+        val signature = genesis.node.signRequest(
             inferenceRequest,
             accountAddress = null,
             timestamp = timestamp,
             endpointAccount = genesisAddress
         )
+        // Phase 3: TA signs hash manually for raw transaction
+        val requestHash = sha256(inferenceRequest)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(requestHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val message = MsgStartInference(
             creator = genesisAddress,
             inferenceId = signature,

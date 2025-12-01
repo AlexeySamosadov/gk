@@ -95,6 +95,24 @@ if payload == "" {
 ```
 This allows gradual rollout but should be removed in Phase 6.
 
+## Signature Verification Architecture
+
+**Dual Verification Model:**
+The system uses both off-chain and on-chain signature verification for security and user experience:
+
+**Off-chain verification (API layer):**
+- Transfer Agent verifies dev signature before accepting request
+- Executor verifies dev + TA signatures before running inference
+- Purpose: Early rejection with clear error messages, reduces wasted computation
+- Location: `decentralized-api/internal/server/public/utils.go`
+
+**On-chain verification (canonical security):**
+- Chain verifies dev + TA + executor signatures in transaction messages
+- Purpose: Cryptographic proof that request is authentic, prevents malicious TAs
+- Location: `inference-chain/x/inference/keeper/msg_server_*.go`
+
+Both layers are required: off-chain provides UX, on-chain provides security guarantees.
+
 ## Breaking Change
 
 This is a breaking change requiring coordinated deployment of:
@@ -114,7 +132,7 @@ All inference-related testermint tests verify:
 
 Run tests with:
 ```bash
-make run-tests TESTS="InferenceTests"
+./gradlew :test --tests "InferenceTests"
 ```
 
 ## Files Modified
@@ -132,5 +150,28 @@ make run-tests TESTS="InferenceTests"
 | Testermint | `data/inference.kt` | Add hash fields to data classes |
 | Testermint | `InferenceTests.kt` | Update signatures to use hashes |
 
+## Test Results
 
+### Initial Results (Commit a6bdf12)
 
+**17 tests, 3 failures, 14 passed**
+
+**Failures:**
+1. `valid inference()` - HTTP 401 Unauthorized  
+2. `valid direct executor request()` - Executor signature mismatch
+3. `repeated request rejected()` - HTTP 401 Unauthorized
+
+**Root causes:**
+1. Tests using manual string concatenation for signature instead of helper with named parameters
+2. Direct executor test expecting executor signature to match TA signature (they sign different hashes)
+
+### Final Results (After Fixes)
+
+**All tests passing ✅**
+
+**Fixes applied:**
+1. `repeated request rejected` - Fixed signature creation to use named parameters instead of manual concatenation
+2. `valid direct executor request` - Removed assertion checking executor signature matches TA signature (they sign different hashes: executor signs `promptHash` after modifications, TA signs `originalPromptHash`)
+3. `InferenceAccountingTests.kt` - Updated to sign hash instead of full payload (one line change: `sha256(payload)`)
+
+**Key insight:** Executor creates its own signature over the modified request (with seed/logprobs), which differs from what test computes. This is expected behavior - test now validates inference completes successfully without asserting exact executor signature match.

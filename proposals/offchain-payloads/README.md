@@ -25,10 +25,11 @@ All inference prompts and response artifacts are currently stored on-chain. Vali
 
 **Signature verification:** 
 Signatures use hashes instead of full payloads:
-- User signature: `original_prompt_hash + timestamp + transfer_address` (verified by TA off-chain)
-- Transfer agent signature: `prompt_hash + timestamp + transfer_address + executor_address` (verified by chain)
+- User signature: `original_prompt_hash + timestamp + transfer_address` (verified by TA off-chain AND chain)
+- Transfer agent signature: `prompt_hash + timestamp + transfer_address + executor_address` (verified by executor off-chain AND chain)
+- Executor signature: `prompt_hash + timestamp + transfer_address + executor_address` (verified by chain)
 
-Where `original_prompt_hash` = SHA256(original_prompt), `prompt_hash` = SHA256(prompt_payload). TA verifies user signature, then creates prompt_payload and signs prompt_hash. Chain only verifies TA signature.
+Where `original_prompt_hash` = SHA256(original_prompt), `prompt_hash` = SHA256(prompt_payload). TA verifies user signature off-chain for early rejection, then creates prompt_payload and signs prompt_hash. Chain verifies ALL signatures (dev, TA, executor) for security. Off-chain verification provides better UX through early error detection.
 
 ## Proposal
 

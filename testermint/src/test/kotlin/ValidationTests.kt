@@ -300,7 +300,8 @@ data class InferenceTestHelper(
     val responsePayload: String = defaultInferenceResponse,
 ) {
     val genesisAddress = genesis.node.getColdAddress()
-    val devSignature = genesis.node.signPayload(
+    // Phase 3: Dev signs hash of original_prompt
+    val devSignature = genesis.node.signRequest(
         inferenceRequest,
         accountAddress = null,
         timestamp = timestamp,
