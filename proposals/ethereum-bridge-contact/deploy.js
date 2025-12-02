@@ -1,20 +1,79 @@
 // Deployment script for BridgeContract
 // Usage: npx hardhat run deploy.js --network <network>
 
-const { ethers } = require("hardhat");
+import hre from "hardhat";
+import { ethers } from "ethers";
+import dotenv from "dotenv";
+
+// Load environment variables from .env file
+dotenv.config();
+
+// Helper function to get provider and signer for current network
+async function getProviderAndSigner() {
+    const networkConnection = await hre.network.connect();
+    const networkName = networkConnection.networkName;
+    
+    // Get RPC URL for the network
+    let rpcUrl;
+    let signer;
+    
+    if (networkName === "localhost" || networkName === "hardhat") {
+        rpcUrl = "http://127.0.0.1:8545";
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        signer = await provider.getSigner();
+        return { provider, signer, ethers };
+    } else {
+        // Remote network - use private key from env
+        rpcUrl = process.env[`${networkName.toUpperCase()}_RPC_URL`];
+        if (!rpcUrl) {
+            throw new Error(`RPC URL not found for network ${networkName}. Set ${networkName.toUpperCase()}_RPC_URL in your .env file.`);
+        }
+        
+        const privateKey = process.env.PRIVATE_KEY;
+        if (!privateKey) {
+            throw new Error(`PRIVATE_KEY not found in environment. Set PRIVATE_KEY in your .env file.`);
+        }
+        
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        signer = new ethers.Wallet(privateKey, provider);
+        return { provider, signer, ethers };
+    }
+}
 
 async function main() {
     console.log("Deploying BridgeContract...");
+    
+    // Get provider and signer
+    const { provider, signer, ethers } = await getProviderAndSigner();
+    console.log("Deploying from:", await signer.getAddress());
+    
+    // Load compiled contract artifacts
+    const artifact = await hre.artifacts.readArtifact("BridgeContract");
+    
+    // Create contract factory
+    const BridgeContract = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
 
-    // Get the contract factory
-    const BridgeContract = await ethers.getContractFactory("BridgeContract");
+    // Define chain IDs for cross-chain replay protection
+    // Gonka chain identifier (using sha256 for unique chain ID)
+    const gonkaChainId = ethers.sha256(ethers.toUtf8Bytes("gonka-mainnet"));
+    
+    // Ethereum chain ID (convert network chain ID to bytes32)
+    const network = await provider.getNetwork();
+    const ethereumChainId = ethers.zeroPadValue(ethers.toBeHex(network.chainId), 32);
+    
+    console.log("Chain IDs:");
+    console.log("- Gonka Chain ID:", gonkaChainId);
+    console.log("- Ethereum Chain ID:", ethereumChainId, "(chain", network.chainId + ")");
 
-    // Deploy the contract
-    const bridge = await BridgeContract.deploy();
-    await bridge.deployed();
+    // Deploy the contract with required constructor arguments
+    const bridge = await BridgeContract.deploy(gonkaChainId, ethereumChainId);
+    
+    console.log("Waiting for deployment...");
+    await bridge.waitForDeployment();
 
-    console.log("BridgeContract deployed to:", bridge.address);
-    console.log("Transaction hash:", bridge.deployTransaction.hash);
+    const contractAddress = await bridge.getAddress();
+    console.log("BridgeContract deployed to:", contractAddress);
+    console.log("Transaction hash:", bridge.deploymentTransaction().hash);
 
     // Verify the initial state
     const currentState = await bridge.getCurrentState();
@@ -37,7 +96,9 @@ async function main() {
 
 // Example usage functions for testing
 async function submitGenesisEpoch(bridgeAddress, groupPublicKey) {
-    const BridgeContract = await ethers.getContractFactory("BridgeContract");
+    const { provider, signer, ethers } = await getProviderAndSigner();
+    const artifact = await hre.artifacts.readArtifact("BridgeContract");
+    const BridgeContract = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
     const bridge = BridgeContract.attach(bridgeAddress);
 
     console.log("Submitting genesis epoch (epoch 1)...");
@@ -55,7 +116,9 @@ async function submitGenesisEpoch(bridgeAddress, groupPublicKey) {
 }
 
 async function enableNormalOperation(bridgeAddress) {
-    const BridgeContract = await ethers.getContractFactory("BridgeContract");
+    const { provider, signer, ethers } = await getProviderAndSigner();
+    const artifact = await hre.artifacts.readArtifact("BridgeContract");
+    const BridgeContract = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
     const bridge = BridgeContract.attach(bridgeAddress);
 
     console.log("Enabling normal operation...");
@@ -73,7 +136,9 @@ async function enableNormalOperation(bridgeAddress) {
 
 // Example withdrawal function for testing
 async function testWithdrawal(bridgeAddress, withdrawalCommand) {
-    const BridgeContract = await ethers.getContractFactory("BridgeContract");
+    const { provider, signer, ethers } = await getProviderAndSigner();
+    const artifact = await hre.artifacts.readArtifact("BridgeContract");
+    const BridgeContract = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
     const bridge = BridgeContract.attach(bridgeAddress);
 
     console.log("Testing withdrawal...");
@@ -106,8 +171,9 @@ function createWithdrawalCommand(epochId, requestId, recipient, tokenContract, a
 const EXAMPLE_GROUP_PUBLIC_KEY = "0x" + "00".repeat(96);
 
 // Export functions for use in other scripts
-module.exports = {
+export {
     main,
+    getProviderAndSigner,
     submitGenesisEpoch,
     enableNormalOperation,
     testWithdrawal,
@@ -116,11 +182,10 @@ module.exports = {
 };
 
 // Run deployment if script is executed directly
-if (require.main === module) {
-    main()
-        .then(() => process.exit(0))
-        .catch((error) => {
-            console.error(error);
-            process.exit(1);
-        });
-}
+// Note: When using 'npx hardhat run', the script is always executed
+main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });
