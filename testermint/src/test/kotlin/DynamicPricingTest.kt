@@ -188,7 +188,7 @@ class DynamicPricingTest : TestermintTest() {
         val message = MsgStartInference(
             creator = genesisAddress,
             inferenceId = signature,
-            promptHash = "not_verified",
+            promptHash = requestHash,
             promptPayload = inferenceRequest,
             model = defaultModel,
             requestedBy = genesisAddress,
@@ -197,7 +197,8 @@ class DynamicPricingTest : TestermintTest() {
             maxTokens = 500,
             promptTokenCount = 10,
             requestTimestamp = timestamp,
-            transferSignature = taSignature
+            transferSignature = taSignature,
+            originalPromptHash = requestHash
         )
 
         val response = genesis.submitMessage(message)
@@ -210,11 +211,14 @@ class DynamicPricingTest : TestermintTest() {
         logSection("Testing FinishInference with no StartInference")
 
         val finishTimestamp = Instant.now().toEpochNanos()
+        // Phase 3: Dev signs original_prompt_hash, TA/Executor sign prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val promptHash = originalPromptHash // Same when no seed modification
         val finishSignature =
-            genesis.node.signPayload(inferenceRequest + finishTimestamp.toString() + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + finishTimestamp.toString() + genesisAddress, null)
         val finishTaSignature =
             genesis.node.signPayload(
-                inferenceRequest + finishTimestamp.toString() + genesisAddress + genesisAddress,
+                promptHash + finishTimestamp.toString() + genesisAddress + genesisAddress,
                 null
             )
         val finishMessage = MsgFinishInference(
@@ -232,6 +236,8 @@ class DynamicPricingTest : TestermintTest() {
             requestedBy = genesisAddress,
             originalPrompt = inferenceRequest,
             model = defaultModel,
+            promptHash = promptHash,
+            originalPromptHash = originalPromptHash
         )
         val finishResponse = genesis.submitMessage(finishMessage)
         assertThat(finishResponse).isSuccess()

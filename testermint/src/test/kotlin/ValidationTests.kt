@@ -321,12 +321,14 @@ data class InferenceTestHelper(
     }
 
     fun getStartInference(): MsgStartInference {
+        // Phase 3: TA signs prompt_hash (not raw request)
+        val requestHash = sha256(request)
         val taSignature =
-            genesis.node.signPayload(request + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(requestHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         return MsgStartInference(
             creator = genesisAddress,
             inferenceId = devSignature,
-            promptHash = "not_verified",
+            promptHash = requestHash,
             promptPayload = request,
             model = model,
             requestedBy = genesisAddress,
@@ -335,13 +337,17 @@ data class InferenceTestHelper(
             maxTokens = 500,
             promptTokenCount = 10,
             requestTimestamp = timestamp,
-            transferSignature = taSignature
+            transferSignature = taSignature,
+            originalPromptHash = requestHash
         )
     }
 
     fun getFinishInference(): MsgFinishInference {
+        // Phase 3: TA/Executor signs prompt_hash (not raw request)
+        val originalPromptHash = sha256(request)
+        val promptHash = originalPromptHash // Same when no seed modification
         val finishTaSignature =
-            genesis.node.signPayload(request + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(promptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         return MsgFinishInference(
             creator = genesisAddress,
             inferenceId = devSignature,
@@ -356,7 +362,9 @@ data class InferenceTestHelper(
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
             originalPrompt = request,
-            model = model
+            model = model,
+            promptHash = promptHash,
+            originalPromptHash = originalPromptHash
         )
     }
 }
