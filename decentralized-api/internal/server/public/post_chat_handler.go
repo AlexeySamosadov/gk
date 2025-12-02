@@ -257,6 +257,7 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 		request.Seed = strconv.Itoa(int(seed))
 		request.TransferAddress = s.recorder.GetAccountAddress()
 		request.TransferSignature = inferenceRequest.TransferSignature
+		request.PromptHash = inferenceRequest.PromptHash
 
 		logging.Info("Execute request on same node, fill request with extra data", types.Inferences, "inferenceId", request.InferenceId, "seed", request.Seed)
 		return s.handleExecutorRequest(ctx, request, ctx.Response().Writer)

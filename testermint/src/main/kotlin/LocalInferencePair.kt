@@ -352,7 +352,8 @@ data class LocalInferencePair(
 
         val address = node.getColdAddress()
         val timestamp = Instant.now().toEpochNanos()
-        val signature = node.signPayload(requestWithStream, account, timestamp = timestamp, endpointAccount = address)
+        // Phase 3: Use signRequest to auto-hash the request
+        val signature = node.signRequest(requestWithStream, account, timestamp = timestamp, endpointAccount = address)
         return api.createInferenceStreamConnection(requestWithStream, address, signature, timestamp)
     }
 

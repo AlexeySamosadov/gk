@@ -175,3 +175,26 @@ Run tests with:
 3. `InferenceAccountingTests.kt` - Updated to sign hash instead of full payload (one line change: `sha256(payload)`)
 
 **Key insight:** Executor creates its own signature over the modified request (with seed/logprobs), which differs from what test computes. This is expected behavior - test now validates inference completes successfully without asserting exact executor signature match.
+
+### Test Helper Method Added
+
+**File:** `testermint/src/main/kotlin/ApplicationCLI.kt`
+
+Added `signRequest()` method to auto-hash requests before signing:
+```kotlin
+fun signRequest(request: String, accountAddress: String? = null, 
+                timestamp: Long? = null, endpointAccount: String? = null): String {
+    val hash = sha256(request)
+    return signPayload(hash, accountAddress, timestamp, endpointAccount)
+}
+```
+
+**Pattern:**
+- Use `signRequest()` when signing inference requests (auto-hashes)
+- Use `signPayload()` for manual signature component construction
+
+**Updated methods:**
+- `LocalInferencePair.makeInferenceRequest()` - Uses `signRequest()`
+- `LocalInferencePair.streamInferenceRequest()` - Uses `signRequest()`
+
+All test files now use `signRequest()` consistently.
