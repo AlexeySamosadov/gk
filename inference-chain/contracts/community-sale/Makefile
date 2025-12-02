@@ -11,7 +11,7 @@ build: clean
 		-v "$(CURDIR)":/code \
 		--mount type=volume,source="$(PROJECT_NAME)_cache",target=/code/target \
 		--mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-		cosmwasm/rust-optimizer:0.17.0 > /dev/null 2>&1
+		cosmwasm/rust-optimizer:0.16.1 > /dev/null 2>&1
 	@echo "✅ Build complete: $(ARTIFACTS_DIR)/$(PROJECT_NAME).wasm"
 
 clean:
