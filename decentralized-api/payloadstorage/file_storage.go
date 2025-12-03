@@ -2,6 +2,7 @@ package payloadstorage
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,6 +24,23 @@ func NewFileStorage(baseDir string) *FileStorage {
 	return &FileStorage{baseDir: baseDir}
 }
 
+// inferenceIdToFilename converts a base64-encoded inferenceId to a hex-encoded filename.
+// This ensures filesystem-safe filenames since base64 can contain '/' characters
+// which are interpreted as directory separators.
+func inferenceIdToFilename(inferenceId string) string {
+	return hex.EncodeToString([]byte(inferenceId))
+}
+
+// filenameToInferenceId converts a hex-encoded filename back to the original inferenceId.
+// This is the inverse of inferenceIdToFilename.
+func filenameToInferenceId(filename string) (string, error) {
+	decoded, err := hex.DecodeString(filename)
+	if err != nil {
+		return "", fmt.Errorf("decode hex filename: %w", err)
+	}
+	return string(decoded), nil
+}
+
 // Atomic write: temp file + rename
 func (f *FileStorage) Store(ctx context.Context, inferenceId string, epochId uint64, promptPayload, responsePayload string) error {
 	epochDir := filepath.Join(f.baseDir, strconv.FormatUint(epochId, 10))
@@ -40,7 +58,9 @@ func (f *FileStorage) Store(ctx context.Context, inferenceId string, epochId uin
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
-	targetPath := filepath.Join(epochDir, inferenceId+".json")
+	// Convert inferenceId to filesystem-safe hex-encoded filename
+	filename := inferenceIdToFilename(inferenceId)
+	targetPath := filepath.Join(epochDir, filename+".json")
 	tempPath := targetPath + ".tmp"
 
 	if err := os.WriteFile(tempPath, data, 0644); err != nil {
@@ -56,7 +76,8 @@ func (f *FileStorage) Store(ctx context.Context, inferenceId string, epochId uin
 }
 
 func (f *FileStorage) Retrieve(ctx context.Context, inferenceId string, epochId uint64) (string, string, error) {
-	filePath := filepath.Join(f.baseDir, strconv.FormatUint(epochId, 10), inferenceId+".json")
+	filename := inferenceIdToFilename(inferenceId)
+	filePath := filepath.Join(f.baseDir, strconv.FormatUint(epochId, 10), filename+".json")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -81,4 +102,3 @@ func (f *FileStorage) PruneEpoch(ctx context.Context, epochId uint64) error {
 }
 
 var _ PayloadStorage = (*FileStorage)(nil)
-

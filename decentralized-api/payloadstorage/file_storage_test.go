@@ -232,3 +232,53 @@ func TestFullCycle_HashIntegrity(t *testing.T) {
 	}
 }
 
+func TestFileStorage_FilesystemUnsafeInferenceIds(t *testing.T) {
+	tests := []struct {
+		name        string
+		inferenceId string
+	}{
+		{
+			name:        "base64 with forward slashes",
+			inferenceId: "5J3sjenocIRq76fpvIV6Cxuo+DNBypuRRectxzWvDb0vPzvja5JmCtGm1ag2s0zoAi2hDI6/NoOXX0cWF/PnRw==",
+		},
+		{
+			name:        "base64 with plus signs",
+			inferenceId: "abc+def+ghi+jkl==",
+		},
+		{
+			name:        "base64 with multiple slashes",
+			inferenceId: "a/b/c/d/e/f/g==",
+		},
+		{
+			name:        "mixed unsafe characters",
+			inferenceId: "a+b/c+d/e==",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			storage := NewFileStorage(dir)
+			ctx := context.Background()
+
+			prompt := `{"model":"test","messages":[{"role":"user","content":"hello"}]}`
+			response := `{"choices":[{"message":{"content":"hi"}}]}`
+
+			if err := storage.Store(ctx, tt.inferenceId, 5, prompt, response); err != nil {
+				t.Fatalf("Store failed for inferenceId %q: %v", tt.inferenceId, err)
+			}
+
+			gotPrompt, gotResponse, err := storage.Retrieve(ctx, tt.inferenceId, 5)
+			if err != nil {
+				t.Fatalf("Retrieve failed for inferenceId %q: %v", tt.inferenceId, err)
+			}
+			if gotPrompt != prompt {
+				t.Errorf("prompt mismatch: got %q, want %q", gotPrompt, prompt)
+			}
+			if gotResponse != response {
+				t.Errorf("response mismatch: got %q, want %q", gotResponse, response)
+			}
+		})
+	}
+}
+
