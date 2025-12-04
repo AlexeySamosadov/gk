@@ -10,22 +10,23 @@ import (
 	"decentralized-api/payloadstorage"
 	"decentralized-api/training"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
 
 type Server struct {
-	e                    *echo.Echo
-	nodeBroker           *broker.Broker
-	configManager        *apiconfig.ConfigManager
-	recorder             cosmosclient.CosmosMessageClient
-	trainingExecutor     *training.Executor
-	blockQueue           *BridgeQueue
-	bandwidthLimiter     *internal.BandwidthLimiter
-	identityCache        *identityCache
-	payloadStorage       payloadstorage.PayloadStorage
-	phaseTracker         *chainphase.ChainPhaseTracker
-	epochGroupDataCache  *internal.EpochGroupDataCache
+	e                   *echo.Echo
+	nodeBroker          *broker.Broker
+	configManager       *apiconfig.ConfigManager
+	recorder            cosmosclient.CosmosMessageClient
+	trainingExecutor    *training.Executor
+	blockQueue          *BridgeQueue
+	bandwidthLimiter    *internal.BandwidthLimiter
+	identityCache       *identityCache
+	payloadStorage      payloadstorage.PayloadStorage
+	phaseTracker        *chainphase.ChainPhaseTracker
+	epochGroupDataCache *internal.EpochGroupDataCache
 }
 
 // TODO: think about rate limits
@@ -43,16 +44,19 @@ func NewServer(
 	configManagerRef = configManager
 
 	s := &Server{
-		e:                    e,
-		nodeBroker:           nodeBroker,
-		configManager:        configManager,
-		recorder:             recorder,
-		trainingExecutor:     trainingExecutor,
-		blockQueue:           blockQueue,
-		identityCache:        newIdentityCache(),
-		payloadStorage:       payloadstorage.NewFileStorage("/root/.dapi/data/inference"),
-		phaseTracker:         phaseTracker,
-		epochGroupDataCache:  internal.NewEpochGroupDataCache(recorder),
+		e:                e,
+		nodeBroker:       nodeBroker,
+		configManager:    configManager,
+		recorder:         recorder,
+		trainingExecutor: trainingExecutor,
+		blockQueue:       blockQueue,
+		identityCache:    newIdentityCache(),
+		payloadStorage: payloadstorage.NewCachedStorage(
+			payloadstorage.NewFileStorage("/root/.dapi/data/inference"),
+			3*time.Minute,
+		),
+		phaseTracker:        phaseTracker,
+		epochGroupDataCache: internal.NewEpochGroupDataCache(recorder),
 	}
 
 	s.bandwidthLimiter = internal.NewBandwidthLimiterFromConfig(configManager, recorder, phaseTracker)

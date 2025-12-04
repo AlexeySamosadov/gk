@@ -95,7 +95,7 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "invalid signature")
 	}
 
-	// Retrieve payloads from storage
+	// Retrieve payloads from storage (with caching handled by storage layer)
 	promptPayload, responsePayload, err := s.payloadStorage.Retrieve(ctx.Request().Context(), inferenceId, epochId)
 	if err != nil {
 		if err == payloadstorage.ErrNotFound {
