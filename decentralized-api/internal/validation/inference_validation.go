@@ -576,7 +576,7 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 	ctx := s.recorder.GetContext()
 	var lastErr error
 
-	logging.Info("[PHASE4-DEBUG] Starting payload retrieval", types.Validation,
+	logging.Debug("Starting payload retrieval from executor", types.Validation,
 		"inferenceId", inf.InferenceId, "executedBy", inf.ExecutedBy, "epochId", inf.EpochId)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -584,26 +584,26 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 			ctx, inf.InferenceId, inf.ExecutedBy, inf.EpochId, s.recorder)
 
 		if err == nil {
-			logging.Info("[PHASE4-DEBUG] Successfully retrieved payloads from executor", types.Validation,
+			logging.Debug("Successfully retrieved payloads from executor", types.Validation,
 				"inferenceId", inf.InferenceId, "attempt", attempt)
 			return promptPayload, responsePayload, nil
 		}
 
 		lastErr = err
-		logging.Warn("[PHASE4-DEBUG] Payload retrieval failed", types.Validation,
+		logging.Warn("Payload retrieval failed, will retry", types.Validation,
 			"inferenceId", inf.InferenceId,
 			"attempt", attempt,
 			"maxRetries", maxRetries,
 			"error", err)
 
-		// Don't wait on first few attempts for faster fallback during testing
+		// Wait between retries (skip sleep on final attempt since we're done)
 		if attempt < maxRetries {
 			time.Sleep(retryInterval)
 		}
 	}
 
 	// Fall back to DEPRECATED chain retrieval
-	logging.Warn("[PHASE4-DEBUG] Retries exhausted, falling back to DEPRECATED chain retrieval", types.Validation,
+	logging.Warn("Retries exhausted, falling back to chain retrieval", types.Validation,
 		"inferenceId", inf.InferenceId, "lastError", lastErr)
 	return retrievePayloadsFromChain(ctx, inf.InferenceId, s.recorder)
 }

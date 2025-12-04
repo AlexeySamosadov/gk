@@ -177,6 +177,8 @@ func validatePayloadRequestSignature(inferenceId string, timestamp int64, valida
 }
 
 // signPayloadResponse signs the payload response with executor's key
+// Uses timestamp=0 since the signature is for non-repudiation, not replay protection
+// (replay protection is handled at request level with validator's timestamp)
 func (s *Server) signPayloadResponse(inferenceId, promptPayload, responsePayload string) (string, error) {
 	// Sign inferenceId + prompt hash + response hash
 	promptHash := utils.GenerateSHA256Hash(promptPayload)
@@ -185,7 +187,7 @@ func (s *Server) signPayloadResponse(inferenceId, promptPayload, responsePayload
 
 	components := calculations.SignatureComponents{
 		Payload:         payload,
-		Timestamp:       time.Now().UnixNano(),
+		Timestamp:       0, // No timestamp - signature is for non-repudiation only
 		TransferAddress: s.recorder.GetAccountAddress(),
 		ExecutorAddress: "",
 	}
