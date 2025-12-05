@@ -296,17 +296,24 @@ data class InferenceTestHelper(
     val request: String = inferenceRequest,
     val model: String = defaultModel,
     val promptHash: String = "not_verified",
-    val timestamp: Long = Instant.now().toEpochNanos(),
     val responsePayload: String = defaultInferenceResponse,
 ) {
     val genesisAddress = genesis.node.getColdAddress()
-    // Phase 3: Dev signs hash of original_prompt
-    val devSignature = genesis.node.signRequest(
-        inferenceRequest,
-        accountAddress = null,
-        timestamp = timestamp,
-        endpointAccount = genesisAddress
-    )
+    
+    // Lazy initialization: timestamp is generated when first accessed (at execution time)
+    // This prevents "signature is too old" errors when there are delays between
+    // InferenceTestHelper construction and runFullInference() call
+    val timestamp: Long by lazy { Instant.now().toEpochNanos() }
+    
+    // Phase 3: Dev signs hash of original_prompt (lazy to use fresh timestamp)
+    val devSignature: String by lazy {
+        genesis.node.signRequest(
+            inferenceRequest,
+            accountAddress = null,
+            timestamp = timestamp,
+            endpointAccount = genesisAddress
+        )
+    }
 
     fun runFullInference(): InferencePayload {
         val startMessage = getStartInference()
