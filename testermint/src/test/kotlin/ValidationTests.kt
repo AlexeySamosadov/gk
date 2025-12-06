@@ -83,9 +83,14 @@ class ValidationTests : TestermintTest() {
 
         val dispatcher = Executors.newFixedThreadPool(10).asCoroutineDispatcher()
         runBlocking(dispatcher) {
-        val deferreds = (1..10).map {
+            // Each parallel inference needs a unique request to avoid duplicate inferenceIds
+            // (timestamp-based IDs can collide when started at the same nanosecond)
+            // Inject a unique nonce field into the JSON request
+            val deferreds = (1..10).map { index ->
                 async {
-            InferenceTestHelper(cluster, genesis, responsePayload = "Invalid JSON!!").runFullInference()
+                    val nonce = "$index-${UUID.randomUUID()}"
+                    val uniqueRequest = inferenceRequest.replaceFirst("}", ", \"_nonce\": \"$nonce\"}")
+                    InferenceTestHelper(cluster, genesis, request = uniqueRequest, responsePayload = "Invalid JSON!!").runFullInference()
                 }
             }
             deferreds.awaitAll()
@@ -298,7 +303,7 @@ data class InferenceTestHelper(
     // Phase 3: Dev signs hash of original_prompt (lazy to use fresh timestamp)
     val devSignature: String by lazy {
         genesis.node.signRequest(
-            inferenceRequest,
+            request,  // Use instance property, not global inferenceRequest
             accountAddress = null,
             timestamp = timestamp,
             endpointAccount = genesisAddress
