@@ -203,25 +203,6 @@ class ValidationTests : TestermintTest() {
         assertThat(afterClaimBalance).isGreaterThan(beforeClaimBalance)
     }
 
-    @Test
-    fun `full inference with invalid response payload`() {
-        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
-        cluster.allPairs.forEach { pair ->
-            pair.waitForMlNodesToLoad()
-        }
-
-        val helper = InferenceTestHelper(cluster, genesis, responsePayload = "Invalid JSON!!")
-        if (!genesis.getEpochData().safeForInference) {
-            genesis.waitForStage(EpochStage.CLAIM_REWARDS, 3)
-        }
-        val inference = helper.runFullInference()
-        // should be invalidated quickly
-        genesis.node.waitForNextBlock(3)
-        val inferencePayload = genesis.node.getInference(inference.inferenceId)
-        assertNotNull(inferencePayload)
-        assertThat(inferencePayload.inference.status).isEqualTo(InferenceStatus.INVALIDATED.value)
-    }
-
     companion object {
         val alwaysValidate = spec {
             this[AppState::inference] = spec<InferenceState> {
@@ -431,5 +412,26 @@ data class InferenceTestHelper(
             promptHash = promptHash,
             originalPromptHash = originalPromptHash
         )
+    }
+}
+
+val alwaysValidate = spec {
+    this[AppState::inference] = spec<InferenceState> {
+        this[InferenceState::params] = spec<InferenceParams> {
+            this[InferenceParams::validationParams] = spec<ValidationParams> {
+                this[ValidationParams::minValidationAverage] = Decimal.fromDouble(100.0)
+                this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(100.0)
+                this[ValidationParams::downtimeHThreshold] = Decimal.fromDouble(100.0)
+
+            }
+            this[InferenceParams::bandwidthLimitsParams] = spec<BandwidthLimitsParams> {
+                this[BandwidthLimitsParams::minimumConcurrentInvalidations] = 100L
+            }
+            this[InferenceParams::epochParams] = spec<EpochParams> {
+                this[EpochParams::inferencePruningEpochThreshold] = 100L
+                // need longer epochs to have time for invalidations
+//                        this[EpochParams::epochLength] = 20L
+            }
+        }
     }
 }

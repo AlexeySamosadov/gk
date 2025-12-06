@@ -302,6 +302,7 @@ fun initialize(pairs: List<LocalInferencePair>, resetMlNodes: Boolean = true): L
             resetMlNodesToDefault(it)
         }
 
+        it.mock?.resetMocks()
         it.mock?.setInferenceResponse(defaultInferenceResponseObject, streamDelay = Duration.ofMillis(200))
         it.getParams()
         it.node.getColdAddress()
@@ -345,7 +346,8 @@ fun initialize(pairs: List<LocalInferencePair>, resetMlNodes: Boolean = true): L
 }
 
 private fun resetMlNodesToDefault(pair: LocalInferencePair) {
-    val defaultNode = validNode.copy(host = "${pair.name.trim('/')}-mock-server")
+    val pairName = pair.name.trim('/')
+    val defaultNode = validNode.copy(host = "ml-0000.$pairName.test")
 
     // We're not really supposed to change nodes in the middle of an epoch
     // This optimization might help avoid unnecessary changes
@@ -366,31 +368,6 @@ private fun resetMlNodesToDefault(pair: LocalInferencePair) {
     Logger.info { "Resetting ml nodes" }
     pair.waitForNextInferenceWindow(windowSizeInBlocks = 5)
     pair.api.setNodesTo(defaultNode)
-}
-
-private fun addUnfundedDirectly(
-    unfunded: List<LocalInferencePair>,
-    currentParticipants: List<Participant>,
-    highestFunded: LocalInferencePair,
-) {
-    for (pair in unfunded) {
-        if (currentParticipants.none { it.id == pair.node.getColdAddress() }) {
-            val selfKey = pair.node.getKeys()[0]
-            val status = pair.node.getStatus()
-            val validatorInfo = status.validatorInfo
-            val valPubKey: PubKey = validatorInfo.pubKey
-            Logger.debug("PubKey extracted pubkey={}", selfKey.pubkey)
-            highestFunded.api.addUnfundedInferenceParticipant(
-                UnfundedInferenceParticipant(
-                    url = "http://${pair.name}-api:8080",
-                    models = listOf(defaultModel),
-                    validatorKey = valPubKey.value,
-                    pubKey = selfKey.pubkey.key,
-                    address = selfKey.address,
-                )
-            )
-        }
-    }
 }
 
 private fun TxResponse.assertSuccess() {

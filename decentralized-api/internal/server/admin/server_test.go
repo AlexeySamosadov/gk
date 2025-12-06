@@ -88,7 +88,7 @@ func setupTestServer(t *testing.T) (*Server, *apiconfig.ConfigManager, *mlnodecl
 	nodeBroker := broker.NewBroker(bridge, nil, mockParticipant, "", mockClientFactory, configManager)
 
 	// 4. Server
-	s := NewServer(mockCosmos, nodeBroker, configManager, nil, nil)
+	s := NewServer(mockCosmos, nodeBroker, configManager, nil, nil, nil)
 
 	return s, configManager, mockClientFactory
 }

@@ -12,7 +12,6 @@ import org.assertj.core.data.Offset
 import org.junit.jupiter.api.Test
 
 class StreamVestingTests : TestermintTest() {
-
     @Test
     fun `comprehensive vesting test with automatic reward system detection`() {
         // Configure genesis with 2-epoch vesting periods for fast testing

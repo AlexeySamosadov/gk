@@ -23,12 +23,16 @@ import kotlin.io.path.exists
 
 const val GENESIS_KEY_NAME = "genesis"
 const val LOCAL_TEST_NET_DIR = "local-test-net"
+val DNS_COMPOSE_FILES = listOf(
+    "$LOCAL_TEST_NET_DIR/docker-compose.dns.yml",
+    "$LOCAL_TEST_NET_DIR/docker-compose.dns-overrides.yml",
+)
 val BASE_COMPOSE_FILES = listOf(
     "${LOCAL_TEST_NET_DIR}/docker-compose-base.yml",
     "${LOCAL_TEST_NET_DIR}/docker-compose.proxy.yml"
 )
-val GENESIS_COMPOSE_FILES = BASE_COMPOSE_FILES + "${LOCAL_TEST_NET_DIR}/docker-compose.genesis.yml"
-val NODE_COMPOSE_FILES = BASE_COMPOSE_FILES + "${LOCAL_TEST_NET_DIR}/docker-compose.join.yml"
+val GENESIS_COMPOSE_FILES = BASE_COMPOSE_FILES + "${LOCAL_TEST_NET_DIR}/docker-compose.genesis.yml" + DNS_COMPOSE_FILES
+val NODE_COMPOSE_FILES = BASE_COMPOSE_FILES + "${LOCAL_TEST_NET_DIR}/docker-compose.join.yml" + DNS_COMPOSE_FILES
 
 data class GenesisUrls(val keyName: String) {
     val apiUrl = "http://$keyName-api:9000"

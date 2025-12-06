@@ -27,8 +27,9 @@ const (
 	Pruning
 	BLS
 	ValidationRecovery
-	Testing
+	Allocation
 	PayloadStorage
+	Testing = 255
 )
 
 func (s SubSystem) String() string {
@@ -81,6 +82,8 @@ func (s SubSystem) String() string {
 		return "BLS"
 	case ValidationRecovery:
 		return "ValidationRecovery"
+	case Allocation:
+		return "Allocation"
 	case PayloadStorage:
 		return "PayloadStorage"
 	default:

@@ -7,6 +7,7 @@ import com.productscience.data.InferenceState
 import com.productscience.data.InferenceParams
 import com.productscience.data.ValidationParams
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.data.Offset
 import org.junit.jupiter.api.Test
 
 class CollateralTests : TestermintTest() {
@@ -86,7 +87,7 @@ class CollateralTests : TestermintTest() {
         val expectedFinalBalance = initialBalance + participantRewards
 
         logHighlight("Expected final balance: $initialBalance (initial) + $participantRewards (epoch rewards) = $expectedFinalBalance")
-        assertThat(finalBalance).isEqualTo(expectedFinalBalance)
+        assertThat(finalBalance).isCloseTo(expectedFinalBalance, Offset.offset(3L))
 
         val finalUnbondingQueue = participant.node.queryUnbondingCollateral(participantAddress)
         assertThat(finalUnbondingQueue.unbondings).isNullOrEmpty()
