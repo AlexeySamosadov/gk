@@ -194,6 +194,7 @@ type MockInferenceHelper struct {
 	keeper            *keeper.Keeper
 	context           sdk.Context
 	previousInference *types.Inference
+	promptPayload     string // Phase 6: Store prompt for hash computation (not stored on-chain)
 }
 
 func NewMockInferenceHelper(t *testing.T) (*MockInferenceHelper, keeper.Keeper, sdk.Context) {
@@ -277,11 +278,12 @@ func (h *MockInferenceHelper) StartInference(
 		startInferenceMsg.MaxTokens = maxTokens
 	}
 	_, err = h.MessageServer.StartInference(h.context, startInferenceMsg)
+	h.promptPayload = promptPayload // Phase 6: Store for hash computation in FinishInference
 	h.previousInference = &types.Inference{
 		Index:               inferenceId,
 		InferenceId:         inferenceId,
 		PromptHash:          promptHash,
-		PromptPayload:       promptPayload,
+		PromptPayload:       "", // Phase 6: Stored offchain
 		RequestedBy:         h.MockRequester.address,
 		Status:              types.InferenceStatus_STARTED,
 		Model:               model,
@@ -293,7 +295,7 @@ func (h *MockInferenceHelper) StartInference(
 		TransferredBy:       h.MockTransferAgent.address,
 		TransferSignature:   taSignature,
 		RequestTimestamp:    requestTimestamp,
-		OriginalPrompt:      promptPayload,
+		OriginalPrompt:      "", // Phase 6: Stored offchain
 		PerTokenPrice:       calculations.PerTokenCost, // Set expected dynamic pricing value
 	}
 	return h.previousInference, nil
@@ -310,7 +312,8 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockExecutor.GetBechAddress()).Return(h.MockExecutor).AnyTimes()
 
 	// Phase 3: Compute hashes for signatures
-	originalPromptHash := sha256Hash(h.previousInference.OriginalPrompt)
+	// Phase 6: Use stored promptPayload (not from inference struct, which is now empty)
+	originalPromptHash := sha256Hash(h.promptPayload)
 	promptHash := h.previousInference.PromptHash // Already computed in StartInference
 
 	// Phase 3: Dev signs original_prompt_hash (no executor address)
@@ -353,7 +356,7 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 		TransferSignature:    taSignature,
 		ExecutorSignature:    eaSignature,
 		RequestedBy:          h.MockRequester.address,
-		OriginalPrompt:       h.previousInference.OriginalPrompt,
+		OriginalPrompt:       h.promptPayload, // Phase 6: Use stored prompt (not from inference struct)
 		Model:                h.previousInference.Model,
 		PromptHash:           promptHash,
 		OriginalPromptHash:   originalPromptHash,
@@ -365,11 +368,11 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 		Index:                    inferenceId,
 		InferenceId:              inferenceId,
 		PromptHash:               h.previousInference.PromptHash,
-		PromptPayload:            h.previousInference.PromptPayload,
+		PromptPayload:            "", // Phase 6: Stored offchain
 		RequestedBy:              h.MockRequester.address,
 		Status:                   types.InferenceStatus_FINISHED,
 		ResponseHash:             "responseHash",
-		ResponsePayload:          "responsePayload",
+		ResponsePayload:          "", // Phase 6: Stored offchain
 		PromptTokenCount:         10,
 		CompletionTokenCount:     20,
 		EpochPocStartBlockHeight: h.previousInference.EpochPocStartBlockHeight,
@@ -387,7 +390,7 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 		TransferredBy:            h.previousInference.TransferredBy,
 		TransferSignature:        h.previousInference.TransferSignature,
 		RequestTimestamp:         h.previousInference.RequestTimestamp,
-		OriginalPrompt:           h.previousInference.OriginalPrompt,
+		OriginalPrompt:           "", // Phase 6: Stored offchain
 		ExecutionSignature:       eaSignature,
 		PerTokenPrice:            calculations.PerTokenCost, // Set expected dynamic pricing value
 	}, nil
