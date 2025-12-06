@@ -295,7 +295,7 @@ func (h *MockInferenceHelper) StartInference(
 		TransferredBy:       h.MockTransferAgent.address,
 		TransferSignature:   taSignature,
 		RequestTimestamp:    requestTimestamp,
-		OriginalPrompt:      "", // Phase 6: Stored offchain
+		OriginalPrompt:      "",                        // Phase 6: Stored offchain
 		PerTokenPrice:       calculations.PerTokenCost, // Set expected dynamic pricing value
 	}
 	return h.previousInference, nil
