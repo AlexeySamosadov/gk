@@ -1,6 +1,7 @@
 package public
 
 import (
+	"context"
 	"decentralized-api/logging"
 	"decentralized-api/payloadstorage"
 	"decentralized-api/utils"
@@ -113,16 +114,21 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 	}
 
 	// Retrieve payloads from storage (with caching handled by storage layer)
-	promptPayload, responsePayload, err := s.payloadStorage.Retrieve(ctx.Request().Context(), inferenceId, epochId)
+	// Try primary epochId first, then adjacent epochs to handle epoch boundary race conditions
+	promptPayload, responsePayload, actualEpochId, err := s.retrievePayloadsWithAdjacentEpochs(ctx.Request().Context(), inferenceId, epochId)
 	if err != nil {
 		if err == payloadstorage.ErrNotFound {
-			logging.Info("Payload not found in storage", types.Validation,
+			logging.Info("Payload not found in storage (checked adjacent epochs)", types.Validation,
 				"inferenceId", inferenceId, "epochId", epochId)
 			return echo.NewHTTPError(http.StatusNotFound, "payload not found")
 		}
 		logging.Error("Failed to retrieve payloads from storage", types.Validation,
 			"inferenceId", inferenceId, "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to retrieve payloads")
+	}
+	if actualEpochId != epochId {
+		logging.Warn("Payload found in adjacent epoch (epoch boundary race)", types.Validation,
+			"inferenceId", inferenceId, "requestedEpochId", epochId, "actualEpochId", actualEpochId)
 	}
 
 	// Sign response with executor's warm key
@@ -191,6 +197,41 @@ func validatePayloadRequestSignature(inferenceId string, timestamp int64, valida
 		ExecutorAddress: "",
 	}
 	return calculations.ValidateSignatureWithGrantees(components, calculations.Developer, pubkeys, signature)
+}
+
+// retrievePayloadsWithAdjacentEpochs tries to retrieve payloads from storage,
+// checking adjacent epochs if not found under the primary epochId.
+// This handles the rare epoch boundary race condition where storage uses
+// phaseTracker's epoch but retrieval uses inference's EpochId from chain.
+// Returns the payloads and the actual epochId where they were found.
+func (s *Server) retrievePayloadsWithAdjacentEpochs(ctx context.Context, inferenceId string, epochId uint64) (string, string, uint64, error) {
+	// Try primary epochId first
+	prompt, response, err := s.payloadStorage.Retrieve(ctx, inferenceId, epochId)
+	if err == nil {
+		return prompt, response, epochId, nil
+	}
+	if err != payloadstorage.ErrNotFound {
+		return "", "", 0, err
+	}
+
+	// Try adjacent epochs (epoch boundary race condition)
+	adjacentEpochs := []uint64{}
+	if epochId > 0 {
+		adjacentEpochs = append(adjacentEpochs, epochId-1)
+	}
+	adjacentEpochs = append(adjacentEpochs, epochId+1)
+
+	for _, adjEpoch := range adjacentEpochs {
+		prompt, response, err := s.payloadStorage.Retrieve(ctx, inferenceId, adjEpoch)
+		if err == nil {
+			return prompt, response, adjEpoch, nil
+		}
+		if err != payloadstorage.ErrNotFound {
+			return "", "", 0, err
+		}
+	}
+
+	return "", "", 0, payloadstorage.ErrNotFound
 }
 
 // signPayloadResponse signs the payload response with executor's key

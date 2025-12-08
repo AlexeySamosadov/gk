@@ -1,71 +1,79 @@
-# Phase 2: Transaction Batching
+# Transaction Batching
 
 ## Problem
 
-After offchain payloads implementation, each inference still requires two on-chain transactions: `MsgStartInference` and `MsgFinishInference`. While payloads are offchain, transaction overhead remains:
-- Block space consumed by transaction metadata
-- Signature verification costs
-- State update overhead per transaction
+Each inference requires 3 on-chain transactions: `MsgStartInference`, `MsgFinishInference`, `MsgValidation` (from 0 to many).
 
-Current transaction size without payloads: ~2-5 KB per inference cycle (start + finish).
+Current constraints (6s blocks, ~10 MB for inference txs):
+- Per-inference: ~2 KB across 3 transactions
+- Transaction count bottleneck: ~3,000 txs/block
+- Current throughput: ~1,000 inferences/block = ~600K/hour
 
-## Proposal
+Block size is underutilized. Transaction count is the limiting factor.
 
-Batch multiple inferences in single transactions to reduce per-inference overhead.
+## Throughput with Batching
 
-**New Transaction Types:**
-- `MsgStartInferenceBatched`: Batch 50-100 inference start requests
-- `MsgFinishInferenceBatched`: Batch 50-100 inference finish requests
+Batching 100 inferences per transaction:
+- Removes tx count bottleneck (3,000 txs = 100K inferences)
+- Block size becomes new ceiling
 
-**Batching Strategy:**
-- Each node sends batched transaction at most once per 5 blocks
-- Batch size: 50-100 inferences per transaction
-- Target batch transaction size: <100 KB
-- Reduces transaction overhead proportionally to batch size
+| Scenario | Bottleneck | Inferences/hour |
+|----------|------------|-----------------|
+| Current (3 txs/inference) | Tx count | 600K |
+| Batched, no optimization | Block size | 11M |
+| Batched + data optimization | Block size | 27M |
 
-**Transaction Structure:**
+## Data Optimization (Custom Proto)
+
+For maximum throughput, custom batched message types can reduce per-inference size by ~60%:
+
+**Address deduplication:** Store unique addresses once, reference by index.
+- Current: 4 addresses × 45 bytes = 180 bytes/inference
+- Optimized: 4 indices × 1 byte = 4 bytes/inference
+
+**Binary encoding:** Raw bytes instead of hex/base64 strings.
+- Hashes: 32 bytes vs 64 bytes (hex)
+- Signatures: 64 bytes vs 88 bytes (base64)
+
+**Shared fields:** Extract common fields to batch level.
+- `creator`, `node_version`, `model` (if batching by model)
+
+## Recommended Approach
+
+**Phase 1: Native Cosmos SDK Multi-Message Transactions**
+
+No chain changes required. API node packages multiple `MsgStartInference` into single transaction:
+
+```go
+txBuilder.SetMsgs(
+    &MsgStartInference{...},
+    &MsgStartInference{...},
+    // ... up to 100
+)
 ```
+
+Benefits:
+- Immediate implementation
+- Removes tx count bottleneck
+- ~18x throughput improvement
+
+**Phase 2: Custom Batched Proto Types (if needed)**
+
+If block size becomes limiting, implement optimized message types:
+
+```proto
 message MsgStartInferenceBatched {
     string creator = 1;
-    repeated InferenceStartMetadata inferences = 2;
+    repeated string executors = 2;
+    repeated StartEntry entries = 3;
 }
 
-message InferenceStartMetadata {
+message StartEntry {
     string inference_id = 1;
-    string model_id = 2;
-    uint64 timestamp = 3;
-    bytes prompt_hash = 4;
-    uint32 input_token_count = 5;
+    bytes prompt_hash = 2;
+    uint32 executor_idx = 3;
+    // ... minimal per-inference fields
 }
 ```
 
-Similar structure for `MsgFinishInferenceBatched` with response metadata.
-
-**Impact:**
-- 50x reduction in transaction count
-- Proportional reduction in signature verification costs
-- Lower block space consumption for same inference throughput
-- Combined with offchain payloads: 3-5x throughput increase becomes 10-20x
-
-## Implementation
-
-**Chain Changes:**
-- Add `MsgStartInferenceBatched` and `MsgFinishInferenceBatched` proto definitions
-- Batch validation: verify all inferences in batch atomically
-- State updates: process batched inferences efficiently
-
-**API Node Changes:**
-- Buffer inference requests for batching window (e.g., 5 blocks)
-- Construct batched transactions when window closes or buffer full
-- Handle partial batch failures gracefully
-
-**Backward Compatibility:**
-- Support both individual and batched transactions during migration
-- Gradual rollout with feature flags
-- Old transactions remain valid during transition period
-
-**Testing:**
-- Unit: Batch validation logic, buffer management
-- Integration: Mixed batched/individual transactions
-- Load: Verify throughput scaling matches projections
-
+Additional ~2.5x improvement over Phase 1.

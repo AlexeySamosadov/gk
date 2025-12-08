@@ -700,9 +700,9 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 		}
 
 		message := &inference.MsgFinishInference{
-			Creator:              executorAddress,
-			InferenceId:          inferenceId,
-			ResponseHash:         responseHash,
+			Creator:      executorAddress,
+			InferenceId:  inferenceId,
+			ResponseHash: responseHash,
 			// Phase 6: ResponsePayload no longer sent on-chain
 			PromptTokenCount:     usage.PromptTokens,
 			CompletionTokenCount: usage.CompletionTokens,
@@ -735,7 +735,12 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 }
 
 func (s *Server) storePayloadsToStorage(ctx context.Context, inferenceId, promptPayload, responsePayload, expectedResponseHash string) {
-	if s.payloadStorage == nil || s.phaseTracker == nil {
+	if s.payloadStorage == nil {
+		logging.Warn("Cannot store payload: payloadStorage is nil", types.Inferences, "inferenceId", inferenceId)
+		return
+	}
+	if s.phaseTracker == nil {
+		logging.Warn("Cannot store payload: phaseTracker is nil", types.Inferences, "inferenceId", inferenceId)
 		return
 	}
 
@@ -821,16 +826,16 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 	originalPromptHash := utils.GenerateSHA256Hash(string(request.Body))
 
 	transaction := &inference.MsgStartInference{
-		InferenceId:  inferenceId,
-		PromptHash:   promptHash,
+		InferenceId: inferenceId,
+		PromptHash:  promptHash,
 		// Phase 6: PromptPayload no longer sent on-chain
-		RequestedBy:        request.RequesterAddress,
-		Model:              request.OpenAiRequest.Model,
-		AssignedTo:         executor.Address,
-		NodeVersion:        nodeVersion,
-		MaxTokens:          uint64(maxTokens),
-		PromptTokenCount:   uint64(promptTokenCount),
-		RequestTimestamp:   request.Timestamp,
+		RequestedBy:      request.RequesterAddress,
+		Model:            request.OpenAiRequest.Model,
+		AssignedTo:       executor.Address,
+		NodeVersion:      nodeVersion,
+		MaxTokens:        uint64(maxTokens),
+		PromptTokenCount: uint64(promptTokenCount),
+		RequestTimestamp: request.Timestamp,
 		// Phase 6: OriginalPrompt no longer sent on-chain
 		OriginalPromptHash: originalPromptHash,
 	}
