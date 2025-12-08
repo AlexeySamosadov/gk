@@ -170,8 +170,9 @@ func main() {
 	blockQueue := pserver.NewBlockQueue(recorder)
 
 	// Shared payload storage for both public and admin servers
+	// Uses PostgreSQL if PGHOST is set and accessible, otherwise file-based
 	payloadStore := payloadstorage.NewCachedStorage(
-		payloadstorage.NewFileStorage("/root/.dapi/data/inference"),
+		payloadstorage.NewPayloadStorage(ctx, "/root/.dapi/data/inference"),
 		3*time.Minute,
 	)
 
