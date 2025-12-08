@@ -51,11 +51,13 @@ type TxManager interface {
 	SendTransactionAsyncWithRetry(rawTx sdk.Msg) (*sdk.TxResponse, error)
 	SendTransactionAsyncNoRetry(rawTx sdk.Msg) (*sdk.TxResponse, error)
 	SendTransactionSyncNoRetry(msg proto.Message) (*ctypes.ResultTx, error)
+	BroadcastMessages(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error)
 	GetClientContext() client.Context
 	GetKeyring() *keyring.Keyring
 	GetApiAccount() apiconfig.ApiAccount
 	Status(ctx context.Context) (*ctypes.ResultStatus, error)
 	BankBalances(ctx context.Context, address string) ([]sdk.Coin, error)
+	GetJetStream() nats.JetStreamContext
 }
 
 type blockTimeTracker struct {
@@ -409,7 +411,6 @@ func (m *manager) observeTxs() error {
 		}
 
 		msg.NakWithDelay(defaultObserverNackDelay)
-		return
 	}, nats.Durable(txObserverConsumer), nats.ManualAck())
 	return err
 }
@@ -460,6 +461,57 @@ func (m *manager) WaitForResponse(txHash string) (*ctypes.ResultTx, error) {
 
 func (m *manager) BankBalances(ctx context.Context, address string) ([]sdk.Coin, error) {
 	return m.client.BankBalances(ctx, address, nil)
+}
+
+func (m *manager) GetJetStream() nats.JetStreamContext {
+	return m.natsJetStream
+}
+
+func (m *manager) BroadcastMessages(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error) {
+	if len(msgs) == 0 {
+		return nil, time.Time{}, nil
+	}
+	if len(msgs) == 1 {
+		return m.broadcastMessage(id, msgs[0])
+	}
+
+	factory, err := m.getFactory(id)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+
+	var finalMsgs []sdk.Msg
+	if !m.apiAccount.IsSignerTheMainAccount() {
+		granteeAddress, err := m.apiAccount.SignerAddress()
+		if err != nil {
+			return nil, time.Time{}, fmt.Errorf("failed to get signer address: %w", err)
+		}
+		execMsg := authztypes.NewMsgExec(granteeAddress, msgs)
+		finalMsgs = []sdk.Msg{&execMsg}
+		logging.Debug("Using authz MsgExec for batch", types.Messages, "grantee", granteeAddress.String(), "msgCount", len(msgs))
+	} else {
+		finalMsgs = msgs
+	}
+
+	unsignedTx, err := factory.BuildUnsignedTx(finalMsgs...)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	txBytes, timestamp, err := m.getSignedBytes(id, unsignedTx, factory)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+
+	resp, err := m.client.Context().BroadcastTxSync(txBytes)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	if resp.Code != 0 {
+		logging.Error("Batch broadcast failed", types.Messages, "code", resp.Code, "rawLog", resp.RawLog, "tx_id", id, "msgCount", len(msgs))
+	} else {
+		logging.Debug("Batch broadcast successful", types.Messages, "tx_id", id, "msgCount", len(msgs))
+	}
+	return resp, timestamp, nil
 }
 
 func (m *manager) broadcastMessage(id string, rawTx sdk.Msg) (*sdk.TxResponse, time.Time, error) {

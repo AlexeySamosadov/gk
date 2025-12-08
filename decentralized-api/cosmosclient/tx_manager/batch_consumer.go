@@ -1,0 +1,220 @@
+package tx_manager
+
+import (
+	"decentralized-api/internal/nats/server"
+	"decentralized-api/logging"
+	"sync"
+	"time"
+
+	"github.com/cosmos/cosmos-sdk/codec"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/nats-io/nats.go"
+	"github.com/productscience/inference/x/inference/types"
+)
+
+const (
+	batchStartConsumer  = "batch-start-consumer"
+	batchFinishConsumer = "batch-finish-consumer"
+)
+
+type BatchConfig struct {
+	FlushSize    int
+	FlushTimeout time.Duration
+}
+
+type pendingMsg struct {
+	msg     sdk.Msg
+	natsMsg *nats.Msg
+}
+
+type BatchConsumer struct {
+	js        nats.JetStreamContext
+	codec     codec.Codec
+	broadcast func(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error)
+	config    BatchConfig
+
+	startBatch  []pendingMsg
+	finishBatch []pendingMsg
+	startMu     sync.Mutex
+	finishMu    sync.Mutex
+
+	startCreatedAt  time.Time
+	finishCreatedAt time.Time
+}
+
+func NewBatchConsumer(
+	js nats.JetStreamContext,
+	cdc codec.Codec,
+	broadcast func(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error),
+	config BatchConfig,
+) *BatchConsumer {
+	return &BatchConsumer{
+		js:          js,
+		codec:       cdc,
+		broadcast:   broadcast,
+		config:      config,
+		startBatch:  make([]pendingMsg, 0, config.FlushSize),
+		finishBatch: make([]pendingMsg, 0, config.FlushSize),
+	}
+}
+
+func (c *BatchConsumer) Start() error {
+	if err := c.subscribeStream(server.TxsBatchStartStream, batchStartConsumer, c.handleStartMsg); err != nil {
+		return err
+	}
+	if err := c.subscribeStream(server.TxsBatchFinishStream, batchFinishConsumer, c.handleFinishMsg); err != nil {
+		return err
+	}
+
+	go c.flushLoop()
+	logging.Info("Batch consumer started", types.Messages,
+		"flushSize", c.config.FlushSize,
+		"flushTimeout", c.config.FlushTimeout)
+	return nil
+}
+
+func (c *BatchConsumer) subscribeStream(stream, consumer string, handler func(*nats.Msg)) error {
+	_, err := c.js.Subscribe(stream, handler, nats.Durable(consumer), nats.ManualAck())
+	return err
+}
+
+func (c *BatchConsumer) handleStartMsg(msg *nats.Msg) {
+	sdkMsg, err := c.unmarshalMsg(msg.Data)
+	if err != nil {
+		logging.Error("Failed to unmarshal start msg", types.Messages, "error", err)
+		msg.Term()
+		return
+	}
+
+	c.startMu.Lock()
+	defer c.startMu.Unlock()
+
+	if len(c.startBatch) == 0 {
+		c.startCreatedAt = time.Now()
+	}
+	c.startBatch = append(c.startBatch, pendingMsg{msg: sdkMsg, natsMsg: msg})
+
+	if len(c.startBatch) >= c.config.FlushSize {
+		c.flushStartLocked()
+	}
+}
+
+func (c *BatchConsumer) handleFinishMsg(msg *nats.Msg) {
+	sdkMsg, err := c.unmarshalMsg(msg.Data)
+	if err != nil {
+		logging.Error("Failed to unmarshal finish msg", types.Messages, "error", err)
+		msg.Term()
+		return
+	}
+
+	c.finishMu.Lock()
+	defer c.finishMu.Unlock()
+
+	if len(c.finishBatch) == 0 {
+		c.finishCreatedAt = time.Now()
+	}
+	c.finishBatch = append(c.finishBatch, pendingMsg{msg: sdkMsg, natsMsg: msg})
+
+	if len(c.finishBatch) >= c.config.FlushSize {
+		c.flushFinishLocked()
+	}
+}
+
+func (c *BatchConsumer) flushLoop() {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		c.checkAndFlushStart()
+		c.checkAndFlushFinish()
+	}
+}
+
+func (c *BatchConsumer) checkAndFlushStart() {
+	c.startMu.Lock()
+	defer c.startMu.Unlock()
+
+	if len(c.startBatch) > 0 && time.Since(c.startCreatedAt) >= c.config.FlushTimeout {
+		c.flushStartLocked()
+	}
+}
+
+func (c *BatchConsumer) checkAndFlushFinish() {
+	c.finishMu.Lock()
+	defer c.finishMu.Unlock()
+
+	if len(c.finishBatch) > 0 && time.Since(c.finishCreatedAt) >= c.config.FlushTimeout {
+		c.flushFinishLocked()
+	}
+}
+
+func (c *BatchConsumer) flushStartLocked() {
+	if len(c.startBatch) == 0 {
+		return
+	}
+
+	batch := c.startBatch
+	c.startBatch = make([]pendingMsg, 0, c.config.FlushSize)
+
+	go c.broadcastBatch("start", batch)
+}
+
+func (c *BatchConsumer) flushFinishLocked() {
+	if len(c.finishBatch) == 0 {
+		return
+	}
+
+	batch := c.finishBatch
+	c.finishBatch = make([]pendingMsg, 0, c.config.FlushSize)
+
+	go c.broadcastBatch("finish", batch)
+}
+
+func (c *BatchConsumer) broadcastBatch(batchType string, batch []pendingMsg) {
+	msgs := make([]sdk.Msg, len(batch))
+	for i, p := range batch {
+		msgs[i] = p.msg
+	}
+
+	logging.Info("Broadcasting batch", types.Messages, "type", batchType, "count", len(msgs))
+
+	_, _, err := c.broadcast(batchType+"-batch", msgs...)
+	if err != nil {
+		logging.Error("Failed to broadcast batch", types.Messages, "type", batchType, "error", err)
+		for _, p := range batch {
+			p.natsMsg.Nak()
+		}
+		return
+	}
+
+	for _, p := range batch {
+		p.natsMsg.Ack()
+	}
+	logging.Debug("Batch broadcast successful", types.Messages, "type", batchType, "count", len(msgs))
+}
+
+func (c *BatchConsumer) unmarshalMsg(data []byte) (sdk.Msg, error) {
+	var msg sdk.Msg
+	if err := c.codec.UnmarshalInterfaceJSON(data, &msg); err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
+func (c *BatchConsumer) PublishStartInference(msg sdk.Msg) error {
+	return c.publishMsg(server.TxsBatchStartStream, msg)
+}
+
+func (c *BatchConsumer) PublishFinishInference(msg sdk.Msg) error {
+	return c.publishMsg(server.TxsBatchFinishStream, msg)
+}
+
+func (c *BatchConsumer) publishMsg(stream string, msg sdk.Msg) error {
+	data, err := c.codec.MarshalInterfaceJSON(msg)
+	if err != nil {
+		return err
+	}
+	_, err = c.js.Publish(stream, data)
+	return err
+}
+

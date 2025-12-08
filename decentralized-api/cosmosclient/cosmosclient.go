@@ -38,10 +38,12 @@ import (
 )
 
 type InferenceCosmosClient struct {
-	ctx        context.Context
-	apiAccount *apiconfig.ApiAccount
-	Address    string
-	manager    tx_manager.TxManager
+	ctx             context.Context
+	apiAccount      *apiconfig.ApiAccount
+	Address         string
+	manager         tx_manager.TxManager
+	batchConsumer   *tx_manager.BatchConsumer
+	batchingEnabled bool
 }
 
 func NewInferenceCosmosClientWithRetry(
@@ -154,12 +156,36 @@ func NewInferenceCosmosClient(ctx context.Context, addressPrefix string, config 
 		return nil, err
 	}
 
-	return &InferenceCosmosClient{
+	client := &InferenceCosmosClient{
 		ctx:        ctx,
 		Address:    accAddress,
 		apiAccount: apiAccount,
 		manager:    mn,
-	}, nil
+	}
+
+	batchingCfg := config.GetTxBatchingConfig()
+	if batchingCfg.Enabled {
+		batchConfig := tx_manager.BatchConfig{
+			FlushSize:    batchingCfg.FlushSize,
+			FlushTimeout: time.Duration(batchingCfg.FlushTimeoutSeconds) * time.Second,
+		}
+		batchConsumer := tx_manager.NewBatchConsumer(
+			mn.GetJetStream(),
+			cosmoclient.Context().Codec,
+			mn.BroadcastMessages,
+			batchConfig,
+		)
+		if err := batchConsumer.Start(); err != nil {
+			return nil, fmt.Errorf("failed to start batch consumer: %w", err)
+		}
+		client.batchConsumer = batchConsumer
+		client.batchingEnabled = true
+		logging.Info("Transaction batching enabled", types.Messages,
+			"flushSize", batchingCfg.FlushSize,
+			"flushTimeoutSeconds", batchingCfg.FlushTimeoutSeconds)
+	}
+
+	return client, nil
 }
 
 type CosmosMessageClient interface {
@@ -283,6 +309,9 @@ func (icc *InferenceCosmosClient) EncryptBytes(plaintext []byte) ([]byte, error)
 
 func (icc *InferenceCosmosClient) StartInference(transaction *inference.MsgStartInference) error {
 	transaction.Creator = icc.Address
+	if icc.batchingEnabled {
+		return icc.batchConsumer.PublishStartInference(transaction)
+	}
 	_, err := icc.manager.SendTransactionAsyncWithRetry(transaction)
 	return err
 }
@@ -290,6 +319,9 @@ func (icc *InferenceCosmosClient) StartInference(transaction *inference.MsgStart
 func (icc *InferenceCosmosClient) FinishInference(transaction *inference.MsgFinishInference) error {
 	transaction.Creator = icc.Address
 	transaction.ExecutedBy = icc.Address
+	if icc.batchingEnabled {
+		return icc.batchConsumer.PublishFinishInference(transaction)
+	}
 	_, err := icc.manager.SendTransactionAsyncWithRetry(transaction)
 	return err
 }

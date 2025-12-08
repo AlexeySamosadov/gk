@@ -18,6 +18,7 @@ type Config struct {
 	UpgradePlan         UpgradePlan           `koanf:"upgrade_plan" json:"upgrade_plan"`
 	MLNodeKeyConfig     MLNodeKeyConfig       `koanf:"ml_node_key_config" json:"ml_node_key_config"`
 	Nats                NatsServerConfig      `koanf:"nats" json:"nats"`
+	TxBatching          TxBatchingConfig      `koanf:"tx_batching" json:"tx_batching"`
 	CurrentNodeVersion  string                `koanf:"current_node_version" json:"current_node_version"`
 	LastUsedVersion     string                `koanf:"last_used_version" json:"last_used_version"`
 	ValidationParams    ValidationParamsCache `koanf:"validation_params" json:"validation_params"`
@@ -28,6 +29,12 @@ type NatsServerConfig struct {
 	Host                  string `koanf:"host" json:"host"`
 	Port                  int    `koanf:"port" json:"port"`
 	MaxMessagesAgeSeconds int64  `koanf:"max_messages_age_seconds"`
+}
+
+type TxBatchingConfig struct {
+	Enabled             bool `koanf:"enabled" json:"enabled"`
+	FlushSize           int  `koanf:"flush_size" json:"flush_size"`
+	FlushTimeoutSeconds int  `koanf:"flush_timeout_seconds" json:"flush_timeout_seconds"`
 }
 
 type UpgradePlan struct {
