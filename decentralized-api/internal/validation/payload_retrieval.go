@@ -25,6 +25,10 @@ import (
 // This should trigger immediate invalidation (no retry).
 var ErrHashMismatch = errors.New("hash mismatch: executor served wrong payload with valid signature")
 
+// ErrEpochStale indicates inference epoch is too old (currentEpoch >= inferenceEpoch + 2).
+// Validation is no longer useful - abort without invalidation.
+var ErrEpochStale = errors.New("inference epoch too old, validation no longer useful")
+
 // HTTP client with timeout for payload retrieval
 var payloadRetrievalClient = apiutils.NewHttpClient(30 * time.Second)
 

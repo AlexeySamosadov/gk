@@ -521,8 +521,22 @@ func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Infere
 			s.submitHashMismatchInvalidation(inf, transactionRecorder, revalidation)
 			return
 		}
+		if errors.Is(err, ErrEpochStale) {
+			// Epoch too old - validation no longer useful, just return
+			logging.Info("Validation aborted: epoch stale", types.Validation,
+				"inferenceId", inf.InferenceId, "inferenceEpoch", inf.EpochId)
+			return
+		}
 		logging.Error("Failed to retrieve payloads", types.Validation,
 			"inferenceId", inf.InferenceId, "error", err)
+		return
+	}
+
+	// Check for duplicate AFTER payload retrieval - catches race conditions
+	// where we already validated during the wait (up to 1 hour)
+	if !revalidation && s.isAlreadyValidated(inf.InferenceId, inf.EpochId, transactionRecorder) {
+		logging.Info("Inference already validated by us, skipping", types.Validation,
+			"inferenceId", inf.InferenceId)
 		return
 	}
 
@@ -581,10 +595,40 @@ func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Infere
 	logging.Info("Successfully validated inference", types.Validation, "id", inf.InferenceId)
 }
 
+// isEpochStale returns true if inference epoch is too old for validation to be useful.
+// Validation is pointless when currentEpoch >= inferenceEpoch + 2.
+func (s *InferenceValidator) isEpochStale(inferenceEpochId uint64) bool {
+	epochState := s.phaseTracker.GetCurrentEpochState()
+	if epochState == nil {
+		return false // Conservative: continue if state unknown
+	}
+	return epochState.LatestEpoch.EpochIndex >= inferenceEpochId+2
+}
+
+// isAlreadyValidated checks if this validator already submitted validation for the inference.
+// Used to avoid duplicate work when multiple sources trigger validation for same inference.
+func (s *InferenceValidator) isAlreadyValidated(inferenceId string, epochId uint64, recorder cosmosclient.InferenceCosmosClient) bool {
+	queryClient := recorder.NewInferenceQueryClient()
+	resp, err := queryClient.EpochGroupValidations(s.recorder.GetContext(), &types.QueryGetEpochGroupValidationsRequest{
+		Participant: recorder.GetAddress(),
+		EpochIndex:  epochId,
+	})
+	if err != nil {
+		return false // Conservative: proceed if check fails
+	}
+	for _, id := range resp.EpochGroupValidations.ValidatedInferences {
+		if id == inferenceId {
+			return true
+		}
+	}
+	return false
+}
+
 // retrievePayloadsWithRetry retrieves payloads from executor with retry logic.
 // For pre-upgrade inferences (PromptPayload not empty), falls back to chain retrieval.
 // For post-upgrade inferences, returns ErrPayloadUnavailable for caller to handle invalidation.
 // Returns ErrHashMismatch immediately (no retry) when executor serves wrong payload with valid signature.
+// Returns ErrEpochStale if inference epoch becomes too old during retries.
 func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (string, string, error) {
 	const maxRetries = 30
 	const retryInterval = 2 * time.Minute // 30 * 2 min = 1 hour total
@@ -596,6 +640,13 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 		"inferenceId", inf.InferenceId, "executedBy", inf.ExecutedBy, "epochId", inf.EpochId)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Check epoch staleness before each attempt
+		if s.isEpochStale(inf.EpochId) {
+			logging.Info("Epoch stale, stopping payload retrieval", types.Validation,
+				"inferenceId", inf.InferenceId, "inferenceEpoch", inf.EpochId)
+			return "", "", ErrEpochStale
+		}
+
 		promptPayload, responsePayload, err := RetrievePayloadsFromExecutor(
 			ctx, inf.InferenceId, inf.ExecutedBy, inf.EpochId, s.recorder)
 
