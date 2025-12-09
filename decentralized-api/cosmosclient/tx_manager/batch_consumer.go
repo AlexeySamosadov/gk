@@ -30,7 +30,7 @@ type pendingMsg struct {
 type BatchConsumer struct {
 	js        nats.JetStreamContext
 	codec     codec.Codec
-	broadcast func(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error)
+	txManager TxManager
 	config    BatchConfig
 
 	startBatch  []pendingMsg
@@ -45,13 +45,13 @@ type BatchConsumer struct {
 func NewBatchConsumer(
 	js nats.JetStreamContext,
 	cdc codec.Codec,
-	broadcast func(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error),
+	txManager TxManager,
 	config BatchConfig,
 ) *BatchConsumer {
 	return &BatchConsumer{
 		js:          js,
 		codec:       cdc,
-		broadcast:   broadcast,
+		txManager:   txManager,
 		config:      config,
 		startBatch:  make([]pendingMsg, 0, config.FlushSize),
 		finishBatch: make([]pendingMsg, 0, config.FlushSize),
@@ -188,9 +188,9 @@ func (c *BatchConsumer) broadcastBatch(batchType string, batch []pendingMsg) {
 
 	logging.Info("Broadcasting batch", types.Messages, "type", batchType, "count", len(msgs))
 
-	_, _, err := c.broadcast(batchType+"-batch", msgs...)
+	err := c.txManager.SendBatchAsyncWithRetry(msgs)
 	if err != nil {
-		logging.Error("Failed to broadcast batch", types.Messages, "type", batchType, "error", err)
+		logging.Error("Failed to hand off batch to TxManager", types.Messages, "type", batchType, "error", err)
 		for _, p := range batch {
 			p.natsMsg.Nak()
 		}
@@ -200,7 +200,7 @@ func (c *BatchConsumer) broadcastBatch(batchType string, batch []pendingMsg) {
 	for _, p := range batch {
 		p.natsMsg.Ack()
 	}
-	logging.Debug("Batch broadcast successful", types.Messages, "type", batchType, "count", len(msgs))
+	logging.Debug("Batch handed off to TxManager", types.Messages, "type", batchType, "count", len(msgs))
 }
 
 func (c *BatchConsumer) unmarshalMsg(data []byte) (sdk.Msg, error) {
@@ -227,4 +227,3 @@ func (c *BatchConsumer) publishMsg(stream string, msg sdk.Msg) error {
 	_, err = c.js.Publish(stream, data)
 	return err
 }
-

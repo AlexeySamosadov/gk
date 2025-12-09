@@ -172,7 +172,7 @@ func NewInferenceCosmosClient(ctx context.Context, addressPrefix string, config 
 		batchConsumer := tx_manager.NewBatchConsumer(
 			mn.GetJetStream(),
 			cosmoclient.Context().Codec,
-			mn.BroadcastMessages,
+			mn,
 			batchConfig,
 		)
 		if err := batchConsumer.Start(); err != nil {

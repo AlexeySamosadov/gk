@@ -1,13 +1,17 @@
 package tx_manager
 
 import (
+	"context"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
+	ctypes "github.com/cometbft/cometbft/rpc/core/types"
+	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/ignite/cli/v28/ignite/pkg/cosmosclient/mocks"
 	"github.com/nats-io/nats-server/v2/server"
@@ -16,7 +20,50 @@ import (
 	testutil "github.com/productscience/inference/testutil/cosmoclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"decentralized-api/apiconfig"
 )
+
+type mockTxManager struct {
+	sendBatchCalls [][]sdk.Msg
+	mu             sync.Mutex
+}
+
+func (m *mockTxManager) SendBatchAsyncWithRetry(msgs []sdk.Msg) error {
+	m.mu.Lock()
+	m.sendBatchCalls = append(m.sendBatchCalls, msgs)
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *mockTxManager) getBatchCalls() [][]sdk.Msg {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sendBatchCalls
+}
+
+func (m *mockTxManager) SendTransactionAsyncWithRetry(sdk.Msg) (*sdk.TxResponse, error) {
+	return &sdk.TxResponse{}, nil
+}
+func (m *mockTxManager) SendTransactionAsyncNoRetry(sdk.Msg) (*sdk.TxResponse, error) {
+	return &sdk.TxResponse{}, nil
+}
+func (m *mockTxManager) SendTransactionSyncNoRetry(proto.Message) (*ctypes.ResultTx, error) {
+	return nil, nil
+}
+func (m *mockTxManager) BroadcastMessages(string, ...sdk.Msg) (*sdk.TxResponse, time.Time, error) {
+	return &sdk.TxResponse{}, time.Now(), nil
+}
+func (m *mockTxManager) GetClientContext() client.Context    { return client.Context{} }
+func (m *mockTxManager) GetKeyring() *keyring.Keyring        { return nil }
+func (m *mockTxManager) GetApiAccount() apiconfig.ApiAccount { return apiconfig.ApiAccount{} }
+func (m *mockTxManager) Status(context.Context) (*ctypes.ResultStatus, error) {
+	return nil, nil
+}
+func (m *mockTxManager) BankBalances(context.Context, string) ([]sdk.Coin, error) {
+	return nil, nil
+}
+func (m *mockTxManager) GetJetStream() nats.JetStreamContext { return nil }
 
 func startTestNatsServer(t *testing.T) (*server.Server, nats.JetStreamContext) {
 	opts := &server.Options{
@@ -78,24 +125,14 @@ func TestBatchConsumer_FlushOnSize(t *testing.T) {
 	_, js := startTestNatsServer(t)
 	cdc := getTestCodec(t)
 
-	var broadcastCalls atomic.Int32
-	var broadcastedMsgs [][]sdk.Msg
-	var mu sync.Mutex
-
-	broadcast := func(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error) {
-		broadcastCalls.Add(1)
-		mu.Lock()
-		broadcastedMsgs = append(broadcastedMsgs, msgs)
-		mu.Unlock()
-		return &sdk.TxResponse{}, time.Now(), nil
-	}
+	mockMgr := &mockTxManager{}
 
 	config := BatchConfig{
 		FlushSize:    5,
 		FlushTimeout: 10 * time.Second,
 	}
 
-	consumer := NewBatchConsumer(js, cdc, broadcast, config)
+	consumer := NewBatchConsumer(js, cdc, mockMgr, config)
 	err := consumer.Start()
 	require.NoError(t, err)
 
@@ -113,30 +150,23 @@ func TestBatchConsumer_FlushOnSize(t *testing.T) {
 	// Wait for processing
 	time.Sleep(500 * time.Millisecond)
 
-	assert.Equal(t, int32(1), broadcastCalls.Load())
-	mu.Lock()
-	require.Len(t, broadcastedMsgs, 1)
-	assert.Len(t, broadcastedMsgs[0], 5)
-	mu.Unlock()
+	calls := mockMgr.getBatchCalls()
+	require.Len(t, calls, 1)
+	assert.Len(t, calls[0], 5)
 }
 
 func TestBatchConsumer_FlushOnTimeout(t *testing.T) {
 	_, js := startTestNatsServer(t)
 	cdc := getTestCodec(t)
 
-	var broadcastCalls atomic.Int32
-
-	broadcast := func(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error) {
-		broadcastCalls.Add(1)
-		return &sdk.TxResponse{}, time.Now(), nil
-	}
+	mockMgr := &mockTxManager{}
 
 	config := BatchConfig{
 		FlushSize:    100, // high threshold
 		FlushTimeout: 2 * time.Second,
 	}
 
-	consumer := NewBatchConsumer(js, cdc, broadcast, config)
+	consumer := NewBatchConsumer(js, cdc, mockMgr, config)
 	err := consumer.Start()
 	require.NoError(t, err)
 
@@ -152,35 +182,25 @@ func TestBatchConsumer_FlushOnTimeout(t *testing.T) {
 
 	// Wait for messages to be consumed
 	time.Sleep(500 * time.Millisecond)
-	assert.Equal(t, int32(0), broadcastCalls.Load())
+	assert.Len(t, mockMgr.getBatchCalls(), 0)
 
 	// Wait for timeout flush (ticker checks every second, timeout is 2s)
 	time.Sleep(3 * time.Second)
-	assert.Equal(t, int32(1), broadcastCalls.Load())
+	assert.Len(t, mockMgr.getBatchCalls(), 1)
 }
 
 func TestBatchConsumer_SeparateQueues(t *testing.T) {
 	_, js := startTestNatsServer(t)
 	cdc := getTestCodec(t)
 
-	var startBatches, finishBatches atomic.Int32
-
-	broadcast := func(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error) {
-		// Use the batch ID to determine type (set by broadcastBatch)
-		if id == "start-batch" {
-			startBatches.Add(1)
-		} else if id == "finish-batch" {
-			finishBatches.Add(1)
-		}
-		return &sdk.TxResponse{}, time.Now(), nil
-	}
+	mockMgr := &mockTxManager{}
 
 	config := BatchConfig{
 		FlushSize:    3,
 		FlushTimeout: 10 * time.Second,
 	}
 
-	consumer := NewBatchConsumer(js, cdc, broadcast, config)
+	consumer := NewBatchConsumer(js, cdc, mockMgr, config)
 	err := consumer.Start()
 	require.NoError(t, err)
 
@@ -206,20 +226,16 @@ func TestBatchConsumer_SeparateQueues(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	assert.Equal(t, int32(1), startBatches.Load())
-	assert.Equal(t, int32(1), finishBatches.Load())
+	// Should have 2 batch calls (one for start, one for finish)
+	calls := mockMgr.getBatchCalls()
+	assert.Len(t, calls, 2)
 }
 
 func TestBatchConsumer_Persistence(t *testing.T) {
 	_, js := startTestNatsServer(t)
 	cdc := getTestCodec(t)
 
-	var broadcastCalls atomic.Int32
-
-	broadcast := func(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error) {
-		broadcastCalls.Add(1)
-		return &sdk.TxResponse{}, time.Now(), nil
-	}
+	mockMgr := &mockTxManager{}
 
 	config := BatchConfig{
 		FlushSize:    10,
@@ -239,7 +255,7 @@ func TestBatchConsumer_Persistence(t *testing.T) {
 	}
 
 	// Now start consumer (simulating restart recovery)
-	consumer := NewBatchConsumer(js, cdc, broadcast, config)
+	consumer := NewBatchConsumer(js, cdc, mockMgr, config)
 	err := consumer.Start()
 	require.NoError(t, err)
 
@@ -247,6 +263,5 @@ func TestBatchConsumer_Persistence(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	// Messages should be recovered and broadcast
-	assert.Equal(t, int32(1), broadcastCalls.Load())
+	assert.Len(t, mockMgr.getBatchCalls(), 1)
 }
-

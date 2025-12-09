@@ -50,6 +50,7 @@ const (
 type TxManager interface {
 	SendTransactionAsyncWithRetry(rawTx sdk.Msg) (*sdk.TxResponse, error)
 	SendTransactionAsyncNoRetry(rawTx sdk.Msg) (*sdk.TxResponse, error)
+	SendBatchAsyncWithRetry(msgs []sdk.Msg) error
 	SendTransactionSyncNoRetry(msg proto.Message) (*ctypes.ResultTx, error)
 	BroadcastMessages(id string, msgs ...sdk.Msg) (*sdk.TxResponse, time.Time, error)
 	GetClientContext() client.Context
@@ -143,9 +144,14 @@ type txToSend struct {
 type txInfo struct {
 	Id       string
 	RawTx    []byte
+	RawBatch [][]byte
 	TxHash   string
 	Timeout  time.Time
 	Attempts int
+}
+
+func (t *txInfo) IsBatch() bool {
+	return len(t.RawBatch) > 0
 }
 
 func (m *manager) GetApiAccount() apiconfig.ApiAccount {
@@ -187,6 +193,48 @@ func (m *manager) SendTransactionAsyncWithRetry(rawTx sdk.Msg) (*sdk.TxResponse,
 		logging.Error("tx broadcast, but failed to put in queue", types.Messages, "tx_id", id, "err", err)
 	}
 	return resp, nil
+}
+
+func (m *manager) SendBatchAsyncWithRetry(msgs []sdk.Msg) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+	if len(msgs) == 1 {
+		_, err := m.SendTransactionAsyncWithRetry(msgs[0])
+		return err
+	}
+
+	id := uuid.New().String()
+	logging.Debug("SendBatchAsyncWithRetry: sending batch", types.Messages, "tx_id", id, "count", len(msgs))
+
+	if halt, err := m.updateChainHalt(); err != nil || halt {
+		logging.Error("chain is slowing down or couldn't fetch actual chain status", types.Messages, "latest_block_timestamp", m.blockTimeTracker.latestBlockTime.Load().(time.Time))
+
+		if err := m.putBatchOnRetry(id, msgs, "", time.Time{}, 0, false); err != nil {
+			logging.Error("failed to put batch in queue", types.Messages, "tx_id", id, "resend_err", err)
+			return ErrTxFailedToBroadcastAndPutOnRetry
+		}
+		return nil
+	}
+
+	resp, timeout, broadcastErr := m.BroadcastMessages(id, msgs...)
+	if broadcastErr != nil {
+		if isTxErrorCritical(broadcastErr) {
+			logging.Error("SendBatchAsyncWithRetry: critical error sending batch", types.Messages, "tx_id", id, "err", broadcastErr)
+			return broadcastErr
+		}
+
+		err := m.putBatchOnRetry(id, msgs, "", timeout, 1, false)
+		if err != nil {
+			logging.Error("batch failed to broadcast, failed to put in queue", types.Messages, "tx_id", id, "broadcast_err", broadcastErr, "resend_err", err)
+		}
+		return ErrTxFailedToBroadcastAndPutOnRetry
+	}
+
+	if err := m.putBatchOnRetry(id, msgs, resp.TxHash, timeout, 1, true); err != nil {
+		logging.Error("batch broadcast, but failed to put in queue", types.Messages, "tx_id", id, "err", err)
+	}
+	return nil
 }
 
 func (m *manager) SendTransactionAsyncNoRetry(rawTx sdk.Msg) (*sdk.TxResponse, error) {
@@ -270,25 +318,65 @@ func (m *manager) putOnRetry(
 	return err
 }
 
-func (m *manager) putTxToObserve(id string, rawTx sdk.Msg, txHash string, timeout time.Time, attempts int) error {
-	logging.Debug(" putTxToObserve: tx with params", types.Messages,
+func (m *manager) putBatchOnRetry(
+	id string,
+	msgs []sdk.Msg,
+	txHash string,
+	timeout time.Time,
+	attempts int,
+	sent bool) error {
+
+	logging.Debug("putBatchOnRetry: batch with params", types.Messages,
 		"tx_id", id,
 		"tx_hash", txHash,
 		"timeout", timeout.String(),
+		"sent", sent,
+		"count", len(msgs),
 	)
 
-	bz, err := m.client.Context().Codec.MarshalInterfaceJSON(rawTx)
+	if attempts >= maxAttempts {
+		logging.Warn("batch tx reached max attempts", types.Messages, "tx_id", id)
+		return nil
+	}
+
+	rawBatch := make([][]byte, len(msgs))
+	for i, msg := range msgs {
+		bz, err := m.client.Context().Codec.MarshalInterfaceJSON(msg)
+		if err != nil {
+			return err
+		}
+		rawBatch[i] = bz
+	}
+
+	if id == "" {
+		id = uuid.New().String()
+	}
+
+	b, err := json.Marshal(&txToSend{
+		TxInfo: txInfo{
+			Id:       id,
+			RawBatch: rawBatch,
+			TxHash:   txHash,
+			Timeout:  timeout,
+		},
+		Sent:     sent,
+		Attempts: attempts,
+	})
 	if err != nil {
 		return err
 	}
+	_, err = m.natsJetStream.Publish(server.TxsToSendStream, b)
+	return err
+}
 
-	b, err := json.Marshal(&txInfo{
-		Id:       id,
-		RawTx:    bz,
-		TxHash:   txHash,
-		Timeout:  timeout,
-		Attempts: attempts,
-	})
+func (m *manager) putInfoToObserve(info txInfo) error {
+	logging.Debug("putInfoToObserve: tx with params", types.Messages,
+		"tx_id", info.Id,
+		"tx_hash", info.TxHash,
+		"timeout", info.Timeout.String(),
+	)
+
+	b, err := json.Marshal(&info)
 	if err != nil {
 		return err
 	}
@@ -315,18 +403,39 @@ func (m *manager) sendTxs() error {
 
 		logging.Debug("SendTxs: got tx", types.Messages, "id", tx.TxInfo.Id)
 
-		rawTx, err := m.unpackTx(tx.TxInfo.RawTx)
-		if err != nil {
-			logging.Error("error unpacking raw tx", types.Messages, "id", tx.TxInfo.Id, "err", err)
-			msg.Term() // malformed, drop it
-			return
+		var resp *sdk.TxResponse
+		var timeout time.Time
+		var broadcastErr error
+
+		if tx.TxInfo.IsBatch() {
+			msgs, err := m.unpackBatch(tx.TxInfo.RawBatch)
+			if err != nil {
+				logging.Error("error unpacking batch", types.Messages, "id", tx.TxInfo.Id, "err", err)
+				msg.Term()
+				return
+			}
+
+			if !tx.Sent {
+				logging.Debug("start broadcast batch async", types.Messages, "id", tx.TxInfo.Id)
+				resp, timeout, broadcastErr = m.BroadcastMessages(tx.TxInfo.Id, msgs...)
+			}
+		} else {
+			rawTx, err := m.unpackTx(tx.TxInfo.RawTx)
+			if err != nil {
+				logging.Error("error unpacking raw tx", types.Messages, "id", tx.TxInfo.Id, "err", err)
+				msg.Term() // malformed, drop it
+				return
+			}
+
+			if !tx.Sent {
+				logging.Debug("start broadcast tx async", types.Messages, "id", tx.TxInfo.Id)
+				resp, timeout, broadcastErr = m.broadcastMessage(tx.TxInfo.Id, rawTx)
+			}
 		}
 
 		if !tx.Sent {
-			logging.Debug("start broadcast tx async", types.Messages, "id", tx.TxInfo.Id)
-			resp, timeout, err := m.broadcastMessage(tx.TxInfo.Id, rawTx)
-			if err != nil {
-				if isTxErrorCritical(err) {
+			if broadcastErr != nil {
+				if isTxErrorCritical(broadcastErr) {
 					logging.Error("got critical error sending tx", types.Messages, "id", tx.TxInfo.Id)
 					msg.Term() // invalid tx, drop it
 					return
@@ -341,7 +450,7 @@ func (m *manager) sendTxs() error {
 
 		logging.Debug("tx broadcast, put to observe", types.Messages, "id", tx.TxInfo.Id, "tx_hash", tx.TxInfo.TxHash, "timeout", tx.TxInfo.Timeout.String())
 
-		if err := m.putTxToObserve(tx.TxInfo.Id, rawTx, tx.TxInfo.TxHash, tx.TxInfo.Timeout, tx.Attempts); err != nil {
+		if err := m.putInfoToObserve(tx.TxInfo); err != nil {
 			logging.Error("error pushing to observe queue", types.Messages, "id", tx.TxInfo.Id, "err", err)
 			msg.NakWithDelay(defaultSenderNackDelay)
 		} else {
@@ -365,7 +474,16 @@ func (m *manager) observeTxs() error {
 			return
 		}
 
-		rawTx, err := m.unpackTx(tx.RawTx)
+		var rawTx sdk.Msg
+		var msgs []sdk.Msg
+		var err error
+
+		if tx.IsBatch() {
+			msgs, err = m.unpackBatch(tx.RawBatch)
+		} else {
+			rawTx, err = m.unpackTx(tx.RawTx)
+		}
+
 		if err != nil {
 			msg.Term()
 			return
@@ -375,7 +493,14 @@ func (m *manager) observeTxs() error {
 			logging.Warn("tx hash is empty", types.Messages, "tx_id", tx.Id)
 
 			tx.Attempts++
-			if err := m.putOnRetry(tx.Id, "", time.Time{}, rawTx, tx.Attempts, false); err != nil {
+			var retryErr error
+			if tx.IsBatch() {
+				retryErr = m.putBatchOnRetry(tx.Id, msgs, "", time.Time{}, tx.Attempts, false)
+			} else {
+				retryErr = m.putOnRetry(tx.Id, "", time.Time{}, rawTx, tx.Attempts, false)
+			}
+
+			if retryErr != nil {
 				msg.NakWithDelay(defaultObserverNackDelay)
 				return
 			}
@@ -401,7 +526,15 @@ func (m *manager) observeTxs() error {
 			if m.blockTimeTracker.latestBlockTime.Load().(time.Time).After(tx.Timeout) {
 				logging.Debug("tx expired", types.Messages, "tx_id", tx.Id, "tx_hash", tx.TxHash, "tx_timestamp", tx.Timeout, "latest_block_timestamp", m.blockTimeTracker.latestBlockTime)
 				tx.Attempts++
-				if err := m.putOnRetry(tx.Id, "", time.Time{}, rawTx, tx.Attempts, false); err != nil {
+
+				var retryErr error
+				if tx.IsBatch() {
+					retryErr = m.putBatchOnRetry(tx.Id, msgs, "", time.Time{}, tx.Attempts, false)
+				} else {
+					retryErr = m.putOnRetry(tx.Id, "", time.Time{}, rawTx, tx.Attempts, false)
+				}
+
+				if retryErr != nil {
 					msg.NakWithDelay(defaultObserverNackDelay)
 					return
 				}
@@ -565,6 +698,18 @@ func (m *manager) unpackTx(bz []byte) (sdk.Msg, error) {
 		return nil, err
 	}
 	return rawTx, nil
+}
+
+func (m *manager) unpackBatch(rawBatch [][]byte) ([]sdk.Msg, error) {
+	msgs := make([]sdk.Msg, len(rawBatch))
+	for i, bz := range rawBatch {
+		msg, err := m.unpackTx(bz)
+		if err != nil {
+			return nil, err
+		}
+		msgs[i] = msg
+	}
+	return msgs, nil
 }
 
 func (m *manager) getFactory(id string) (*tx.Factory, error) {
