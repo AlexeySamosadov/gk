@@ -148,13 +148,17 @@ func (bm *BlsManager) setupAndPerformVerification(epochID uint64, epochData *typ
 		"totalSlots", epochData.ITotalSlots,
 		"tDegree", epochData.TSlotsDegree)
 
-	// Perform verification and reconstruction
 	err := bm.performVerificationAndReconstruction(verificationResult, epochData.DealerParts, myParticipantIndex)
 	if err != nil {
 		return false, fmt.Errorf("failed to perform verification and reconstruction: %w", err)
 	}
 
-	// Store the completed verification result in cache
+	if epochData.DkgPhase == types.DKGPhase_DKG_PHASE_COMPLETED ||
+		epochData.DkgPhase == types.DKGPhase_DKG_PHASE_SIGNED {
+		verificationResult.ValidDealers = epochData.ValidDealers
+		verificationResult.GroupPublicKey = epochData.GroupPublicKey
+	}
+
 	bm.storeVerificationResult(verificationResult)
 
 	return true, nil
