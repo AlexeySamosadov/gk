@@ -102,15 +102,17 @@ func (bm *BlsManager) setupAndPerformVerification(epochID uint64, epochData *typ
 		EpochID: epochID,
 	}
 
-	// Set the DKG phase from epoch data
 	verificationResult.DkgPhase = epochData.DkgPhase
 
-	// Validate we're in the correct phase
-	if epochData.DkgPhase != types.DKGPhase_DKG_PHASE_VERIFYING {
-		logging.Debug(verifierLogTag+"DKG not in verifying phase", inferenceTypes.BLS,
+	switch epochData.DkgPhase {
+	case types.DKGPhase_DKG_PHASE_VERIFYING,
+		types.DKGPhase_DKG_PHASE_COMPLETED,
+		types.DKGPhase_DKG_PHASE_SIGNED:
+	default:
+		logging.Debug(verifierLogTag+"DKG not in valid phase for verification", inferenceTypes.BLS,
 			"epochID", epochID,
 			"currentPhase", epochData.DkgPhase)
-		return false, nil // Return false to indicate we should skip verification
+		return false, nil
 	}
 
 	// Find our participant info
