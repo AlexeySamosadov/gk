@@ -32,7 +32,7 @@ type NatsServerConfig struct {
 }
 
 type TxBatchingConfig struct {
-	Enabled             bool `koanf:"enabled" json:"enabled"`
+	Disabled            bool `koanf:"disabled" json:"disabled"`
 	FlushSize           int  `koanf:"flush_size" json:"flush_size"`
 	FlushTimeoutSeconds int  `koanf:"flush_timeout_seconds" json:"flush_timeout_seconds"`
 }

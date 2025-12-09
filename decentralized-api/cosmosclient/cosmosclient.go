@@ -164,7 +164,7 @@ func NewInferenceCosmosClient(ctx context.Context, addressPrefix string, config 
 	}
 
 	batchingCfg := config.GetTxBatchingConfig()
-	if batchingCfg.Enabled {
+	if !batchingCfg.Disabled {
 		batchConfig := tx_manager.BatchConfig{
 			FlushSize:    batchingCfg.FlushSize,
 			FlushTimeout: time.Duration(batchingCfg.FlushTimeoutSeconds) * time.Second,
