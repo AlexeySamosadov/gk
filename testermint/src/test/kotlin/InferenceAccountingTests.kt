@@ -232,14 +232,14 @@ class InferenceAccountingTests : TestermintTest() {
                     requester,
                     taAddress = requestingNode.node.getColdAddress()
                 )
-                cluster.genesis.node.waitForNextBlock()
+                cluster.genesis.node.waitForNextBlock(2)
                 results.add(cluster.genesis.api.getInference(response.id))
             } catch (e: Exception) {
                 Logger.warn(e.toString())
                 var foundInference: InferencePayload? = null
                 var tries = 0
                 while (foundInference == null) {
-                    cluster.genesis.node.waitForNextBlock()
+                    cluster.genesis.node.waitForNextBlock(2)
                     val inferences = cluster.genesis.node.getInferences()
                     foundInference =
                         inferences.inference

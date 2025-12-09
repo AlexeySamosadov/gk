@@ -186,7 +186,7 @@ data class DockerGroup(
                 validatorKey,
                 this.genesisGroup?.apiUrl ?: "http://genesis-api:9000"
             )
-            node.waitForNextBlock()
+            node.waitForNextBlock(2)
             node.grantMlOpsPermissionsToWarmAccount()
             val startRemainingArgs = baseArgs + listOf("api", "mock-server", "proxy")
             this.coldAccountPubkey = node.getColdPubKey()

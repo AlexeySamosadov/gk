@@ -411,7 +411,7 @@ data class LocalInferencePair(
             if (condition(this)) {
                 return
             }
-            this.node.waitForNextBlock()
+            this.node.waitForNextBlock(2)
             currentBlock = this.getCurrentBlockHeight()
             mostRecentEpochData = this.api.getLatestEpoch()
         }
@@ -708,7 +708,7 @@ data class LocalInferencePair(
             while (tries < blocks &&
                 (if (finished) inference?.actualCost == null else inference == null)
             ) {
-                this.node.waitForNextBlock()
+                this.node.waitForNextBlock(2)
                 inference = this.api.getInferenceOrNull(inferenceId)
                 tries++
             }

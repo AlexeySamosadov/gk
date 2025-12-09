@@ -138,7 +138,7 @@ fun makeInferenceRequest(highestFunded: LocalInferencePair, payload: String): In
     val inferenceId = response.id
 
     val inference = generateSequence {
-        highestFunded.node.waitForNextBlock()
+        highestFunded.node.waitForNextBlock(2)
         try {
             highestFunded.api.getInference(inferenceId)
         } catch (_: FuelError) {
@@ -201,7 +201,7 @@ private fun makeStreamingInferenceRequest(highestFunded: LocalInferencePair, pay
 
     // Wait for the inference to be logged in the chain
     val inference = generateSequence {
-        highestFunded.node.waitForNextBlock()
+        highestFunded.node.waitForNextBlock(2)
         try {
             highestFunded.api.getInference(inferenceId)
         } catch (_: FuelError) {
@@ -277,7 +277,7 @@ fun makeInterruptedStreamingInferenceRequest(
 
     // Wait for the inference to be logged in the chain
     val inference = generateSequence {
-        highestFunded.node.waitForNextBlock()
+        highestFunded.node.waitForNextBlock(2)
         try {
             highestFunded.api.getInference(inferenceId)
         } catch (_: FuelError) {
@@ -328,7 +328,7 @@ fun initialize(pairs: List<LocalInferencePair>, resetMlNodes: Boolean = true): L
 //    addUnfundedDirectly(unfunded, currentParticipants, highestFunded)
 //    fundUnfunded(unfunded, highestFunded)
 
-    highestFunded.node.waitForNextBlock()
+    highestFunded.node.waitForNextBlock(2)
     pairs.forEach { pair ->
         pair.waitForBlock((highestFunded.getParams().epochParams.epochLength * 2).toInt() + 2) {
             val address = pair.node.getColdAddress()

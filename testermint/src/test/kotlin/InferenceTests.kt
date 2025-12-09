@@ -308,7 +308,7 @@ class InferenceTests : TestermintTest() {
         assertThat(valid.id).isEqualTo(signature)
         assertThat(valid.model).isEqualTo(inferenceRequestObject.model)
         assertThat(valid.choices).hasSize(1)
-        genesis.node.waitForNextBlock()
+        genesis.node.waitForNextBlock(2)
         val inference = genesis.node.getInference(valid.id)?.inference
         assertNotNull(inference)
         softly {

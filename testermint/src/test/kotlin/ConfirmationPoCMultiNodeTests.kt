@@ -398,7 +398,7 @@ fun waitForConfirmationPoCTrigger(pair: LocalInferencePair, maxBlocks: Int = 100
         if (epochData.isConfirmationPocActive && epochData.activeConfirmationPocEvent != null) {
             return epochData.activeConfirmationPocEvent
         }
-        pair.node.waitForNextBlock()
+        pair.node.waitForNextBlock(2)
         attempts++
     }
     return null
@@ -426,7 +426,7 @@ fun waitForConfirmationPoCPhase(
             epochData.activeConfirmationPocEvent?.phase == targetPhase) {
             return
         }
-        pair.node.waitForNextBlock()
+        pair.node.waitForNextBlock(2)
         attempts++
     }
     error("Timeout waiting for confirmation PoC phase: $targetPhase")
@@ -442,7 +442,7 @@ fun waitForConfirmationPoCCompletion(
         if (!epochData.isConfirmationPocActive) {
             return
         }
-        pair.node.waitForNextBlock()
+        pair.node.waitForNextBlock(2)
         attempts++
     }
     error("Timeout waiting for confirmation PoC completion")

@@ -31,7 +31,7 @@ class CollateralTests : TestermintTest() {
         logHighlight("Initial balance is ${initialBalance}")
         val result = participant.depositCollateral(depositAmount)
         assertThat(result.code).isEqualTo(0)
-        participant.node.waitForNextBlock()
+        participant.node.waitForNextBlock(2)
 
         logHighlight("Verifying collateral and balance changes")
         val collateralAfterDeposit = participant.queryCollateral(participantAddress)
@@ -52,7 +52,7 @@ class CollateralTests : TestermintTest() {
         Thread.sleep(10000)
 
         participant.withdrawCollateral(depositAmount)
-        participant.node.waitForNextBlock()
+        participant.node.waitForNextBlock(2)
 
         logSection("Verifying withdrawl")
         val activeCollateral = participant.queryCollateral(participantAddress)
@@ -118,7 +118,7 @@ class CollateralTests : TestermintTest() {
 
         logSection("Depositing $depositAmount nicoin for ${genesis.name}")
         genesis.depositCollateral(depositAmount)
-        genesis.node.waitForNextBlock()
+        genesis.node.waitForNextBlock(2)
 
         logHighlight("Verifying initial collateral")
         val initialCollateral = genesis.queryCollateral(genesisAddress)
@@ -138,7 +138,7 @@ class CollateralTests : TestermintTest() {
         val activeAmount = depositAmount - withdrawAmount
         logSection("Withdrawing $withdrawAmount nicoin to create unbonding collateral")
         genesis.withdrawCollateral(withdrawAmount)
-        genesis.node.waitForNextBlock()
+        genesis.node.waitForNextBlock(2)
 
         logSection("Verifying pre-slash state: $activeAmount active, $withdrawAmount unbonding")
         val activeCollateralBeforeSlash = genesis.queryCollateral(genesisAddress)
@@ -166,7 +166,7 @@ class CollateralTests : TestermintTest() {
 
         val timeoutsAfter = genesis.node.getInferenceTimeouts()
         logSection("Total timeouts after expiration wait: ${timeoutsAfter.inferenceTimeout?.count() ?: 0}")
-        genesis.node.waitForNextBlock()
+        genesis.node.waitForNextBlock(2)
 
         logSection("Waiting for slashing on downtime")
         genesis.node.waitForNextBlock(2)
