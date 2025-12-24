@@ -33,3 +33,9 @@ prod-local/
 /testermint/downloads/
 /testermint/logs/
 balances-*.json
+# Large binaries
+*.a
+cosmovisor/
+deploy/join/.dapi/cosmovisor/
+decentralized-api
+inferenced
