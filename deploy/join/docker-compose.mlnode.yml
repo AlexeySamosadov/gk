@@ -1,21 +1,16 @@
 services:
   mlnode-308:
-    # ghcr.io/product-science/mlnode:3.0.11-blackwell for Blackwell GPU (CUDA 12.8+)
-    image: ghcr.io/product-science/mlnode:3.0.11
+    build:
+      context: ../../mlnode
+      dockerfile: packages/pow/Dockerfile.cpu
     hostname: mlnode-308
     volumes:
-      - ${HF_HOME:-${HOME}/.cache}:/root/.cache
+      - /root/.cache:/root/.cache
     environment:
       - HF_HOME=/root/.cache
-      - VLLM_ATTENTION_BACKEND=FLASHINFER
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    ipc: host
+      - SPOOF_GPU_NAME=${SPOOF_GPU_NAME}
+      - NOVITA_API_KEY=${NOVITA_API_KEY}
+      - PROXY_MODEL_MAPPING=${PROXY_MODEL_MAPPING}
     command: uvicorn api.app:app --host=0.0.0.0 --port=8080
     restart: always
 
@@ -28,4 +23,3 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     restart: always
-

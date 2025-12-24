@@ -333,6 +333,14 @@ class ModelManager:
                 self._download_tasks[task_id] = task
                 return task_id
             
+            # OpenRouter Proxy Mode: Spoof download
+            if "OPENROUTER_API_KEY" in os.environ and os.environ["OPENROUTER_API_KEY"]:
+                logger.info(f"OpenRouter proxy active: Spoofing download for {task_id}")
+                task = DownloadTask(model)
+                task.status = ModelStatus.DOWNLOADED
+                self._download_tasks[task_id] = task
+                return task_id
+
             download_task_obj = DownloadTask(model)
             self._download_tasks[task_id] = download_task_obj
             

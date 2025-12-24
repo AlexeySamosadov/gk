@@ -4,18 +4,22 @@ from requests.exceptions import RequestException
 from typing import List
 from multiprocessing import Process, Queue, Event
 
-from pow.data import (
-    ProofBatch,
-    ValidatedBatch,
-    InValidation,
-)
-from pow.compute.controller import (
-    Controller,
-    Phase,
-)
+from pow.data import ProofBatch, ValidatedBatch, InValidation
+from pow.compute.utils import Phase
 from common.logger import create_logger
 
 logger = create_logger(__name__)
+
+
+def get_from_queue(queue: Queue, timeout: float = 0.1) -> List:
+    items = []
+    while True:
+        try:
+            item = queue.get(timeout=timeout)
+            items.append(item)
+        except:
+            break
+    return items
 
 
 class Sender(Process):
@@ -24,9 +28,11 @@ class Sender(Process):
         url: str,
         generation_queue: Queue,
         validation_queue: Queue,
-        phase: Phase,
+        phase,
         r_target: float,
         fraud_threshold: float,
+        block_height: int = 0,
+        node_id: int = 0,
     ):
         super().__init__()
         self.url = url
@@ -36,6 +42,8 @@ class Sender(Process):
         self.in_validation_queue = Queue()
         self.r_target = r_target
         self.fraud_threshold = fraud_threshold
+        self.block_height = block_height
+        self.node_id = node_id
 
         self.in_validation: List[InValidation] = []
         self.generated_not_sent: List[ProofBatch] = []
@@ -47,19 +55,29 @@ class Sender(Process):
             return
 
         failed_batches = []
-
         for batch in self.generated_not_sent:
             try:
-                logger.info(f"Sending generated batch to {self.url}")
-                response = requests.post(
-                    f"{self.url}/generated",
-                    json=batch.__dict__,
-                )
+                send_url = "http://api:9100/v1/poc-batches/generated"
+                logger.info(f"Sending generated batch to {send_url}")
+                
+                if isinstance(batch, dict):
+                    nonces = batch.get("nonces", [])
+                    dist = batch.get("dist") or batch.get("dists", [])
+                    data = {"nonces": nonces, "dist": [float(d) for d in dist]}
+                else:
+                    data = {"nonces": batch.nonces, "dist": [float(d) for d in batch.dist]}
+                
+                if self.block_height > 0:
+                    data["block_height"] = self.block_height
+                if self.node_id >= 0:
+                    data["node_id"] = self.node_id  # API maps this to NodeNum
+                    
+                response = requests.post(send_url, json=data, timeout=10)
                 response.raise_for_status()
                 logger.info("Successfully sent generated batch")
             except RequestException as e:
                 failed_batches.append(batch)
-                logger.error(f"Error sending generated batch to {self.url}: {e}")
+                logger.error(f"Error sending generated batch: {e}")
 
         self.generated_not_sent = failed_batches
 
@@ -68,72 +86,48 @@ class Sender(Process):
             return
 
         failed_batches = []
-
         for batch in self.validated_not_sent:
             try:
-                logger.info(f"Sending validated batch to {self.url}")
-                response = requests.post(
-                    f"{self.url}/validated",
-                    json=batch.__dict__,
-                )
+                send_url = "http://api:9100/v1/poc-batches/validated"
+                logger.info(f"Sending validated batch to {send_url}")
+                if isinstance(batch, dict):
+                    data = batch.copy()
+                    if "dists" in data and "dist" not in data:
+                        data["dist"] = data.pop("dists")
+                else:
+                    data = batch.__dict__.copy()
+                if self.block_height > 0:
+                    data["block_height"] = self.block_height
+                response = requests.post(send_url, json=data, timeout=10)
                 response.raise_for_status()
                 logger.info("Successfully sent validated batch")
             except RequestException as e:
                 failed_batches.append(batch)
-                logger.error(f"Error sending validated batch to {self.url}: {e}")
+                logger.error(f"Error sending validated batch: {e}")
 
         self.validated_not_sent = failed_batches
 
-    def _get_generated(self) -> ProofBatch:
-        batches = [
-            ProofBatch.merge(
-                Controller.get_from_queue(self.generation_queue)
-            )
-        ]
-        return ProofBatch.merge(batches)
-
-    def _get_validated(self) -> List[ValidatedBatch]:
-        batches = Controller.get_from_queue(self.validation_queue)
-        in_validation = self._get_in_validation()
-        for batch in batches:
-            for in_val in in_validation:
-                in_val.process(batch)
-
-        in_validation_ready = [
-            in_val.validated(self.r_target, self.fraud_threshold)
-            for in_val in in_validation
-            if in_val.is_ready()
-        ]
-        return in_validation_ready
-
-    def _get_in_validation(self) -> List[InValidation]:
-        batches = Controller.get_from_queue(self.in_validation_queue)
-        batches = [
-            InValidation(batch)
-            for batch in batches
-        ]
-        self.in_validation.extend(batches)
-        return self.in_validation
-
-    def run(self):
-        logger.info("Sender started")
-        while not self.stop_event.is_set():
-            if self.phase.value == Phase.GENERATE:
-                generated = self._get_generated()
-                if len(generated) > 0:
-                    self.generated_not_sent.append(generated)
-                self._send_generated()
-
-            elif self.phase.value == Phase.VALIDATE:
-                self.validated_not_sent.extend(self._get_validated())
-                self.in_validation = [
-                    b for b in self.in_validation
-                    if not b.is_ready()
-                ]
-                self._send_validated()
-
-            time.sleep(5)
-        logger.info("Sender stopped")
-
     def stop(self):
         self.stop_event.set()
+
+    def run(self):
+        logger.info(f"Sender started with block_height={self.block_height}, node_id={self.node_id}")
+        while not self.stop_event.is_set():
+            try:
+                phase = self.phase.value
+                generated = get_from_queue(self.generation_queue)
+                self.generated_not_sent.extend(generated)
+                validated = get_from_queue(self.validation_queue)
+                self.validated_not_sent.extend(validated)
+                
+                if phase == Phase.GENERATE:
+                    self._send_generated()
+                elif phase == Phase.VALIDATE:
+                    self._send_validated()
+                    
+                time.sleep(0.1)
+            except Exception as e:
+                logger.error(f"Sender error: {e}")
+                time.sleep(1)
+                
+        logger.info("Sender stopped")

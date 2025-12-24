@@ -37,8 +37,7 @@ async def inference_setup(
         )
 
     try:
-        manager.start_async(init_request)
-        await manager._startup_task
+        await manager.start_async(init_request)
         return {"status": "OK"}
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -68,7 +67,7 @@ async def inference_setup_async(
         )
     
     try:
-        manager.start_async(init_request)
+        await manager.start_async(init_request)
         return {
             "status": "starting",
             "message": "Inference startup initiated in background"

@@ -1,0 +1,35 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --upgrade pip && \
+    pip install \
+    fastapi>=0.115.8 \
+    uvicorn>=0.34.0 \
+    httpx[http2] \
+    pydantic>=2.9.2 \
+    requests \
+    numpy \
+    scipy \
+    huggingface_hub \
+    psutil \
+    aiofiles \
+    transformers \
+    sentencepiece
+
+COPY packages/pow/src /app/packages/pow/src
+COPY packages/common/src /app/packages/common/src
+COPY packages/api/src /app/packages/api/src
+
+ENV PYTHONPATH="/app/packages/pow/src:/app/packages/common/src:/app/packages/api/src"
+
+WORKDIR /app
+
+CMD ["uvicorn", "api.app:app", "--host=0.0.0.0", "--port=8080"]

@@ -6,7 +6,7 @@
     "poc_port": 8080,
     "max_concurrent": 500,
     "models": {
-      "Qwen/Qwen2.5-7B-Instruct": {
+      "Qwen/Qwen3-32B-FP8": {
         "args": [
           "--quantization",
           "fp8",
@@ -14,6 +14,12 @@
           "0.9"
         ]
       }
-    }
+    },
+    "hardware": [
+      {
+        "type": "CPU",
+        "count": 20
+      }
+    ]
   }
 ]

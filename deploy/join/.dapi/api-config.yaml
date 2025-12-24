@@ -1,0 +1,65 @@
+api:
+    admin_server_port: 9200
+    ml_grpc_callback_address: ""
+    ml_grpc_server_port: 0
+    ml_server_port: 9100
+    poc_callback_url: http://api:9200
+    port: 0
+    public_server_port: 9000
+    public_url: http://136.243.107.125:8080
+    test_mode: false
+bandwidth_params:
+    estimated_limits_per_block_kb: 0
+    kb_per_input_token: 0
+    kb_per_output_token: 0
+    max_inferences_per_block: 0
+chain_node:
+    KeyringPassword: "12345678"
+    account_public_key: ApvjX9PWg/sdzjINUPYS98NprsnQIJHUJeAXGEH5JeZH
+    is_genesis: false
+    keyring_backend: file
+    keyring_dir: ""
+    seed_api_url: http://node1.gonka.ai:9100
+    signer_key_name: gonka-account-key
+    url: http://node:26657
+current_height: 0
+current_node_version: ""
+current_seed:
+    claimed: false
+    epoch_index: 0
+    seed: 0
+    signature: ""
+last_processed_height: 0
+last_used_version: ""
+merged_node_config: false
+ml_node_key_config:
+    worker_private: ""
+    worker_public: ""
+nats:
+    host: ""
+    max_messages_age_seconds: 0
+    port: 0
+nodes: []
+previous_seed:
+    claimed: false
+    epoch_index: 0
+    seed: 0
+    signature: ""
+tx_batching:
+    disabled: false
+    flush_size: 0
+    flush_timeout_seconds: 0
+upcoming_seed:
+    claimed: false
+    epoch_index: 0
+    seed: 0
+    signature: ""
+upgrade_plan:
+    binaries: {}
+    height: 0
+    name: ""
+    node_version: ""
+validation_params:
+    expiration_blocks: 0
+    timestamp_advance: 0
+    timestamp_expiration: 0

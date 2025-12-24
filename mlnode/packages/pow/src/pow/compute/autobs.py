@@ -38,19 +38,15 @@ class GPUMemoryMonitor:
     def _monitor_memory(self):
         while self.monitoring:
             try:
-                result = subprocess.run([
-                    'nvidia-smi', 
-                    '--query-gpu=memory.used', 
-                    '--format=csv,noheader,nounits',
-                    f'--id={self.device_id}'
-                ], capture_output=True, text=True, timeout=1)
-                
-                if result.returncode == 0:
-                    memory_mb = float(result.stdout.strip())
-                    self.peak_memory_mb = max(self.peak_memory_mb, memory_mb)
+                # AMD Port: Use torch.cuda.memory_reserved() instead of nvidia-smi
+                # This works on both CUDA and ROCm (if installed correctly)
+                memory_bytes = torch.cuda.memory_reserved(self.device_id)
+                memory_mb = memory_bytes / (1024 * 1024)
+                self.peak_memory_mb = max(self.peak_memory_mb, memory_mb)
                 
                 time.sleep(self.poll_interval)
-            except (subprocess.TimeoutExpired, ValueError, FileNotFoundError):
+            except Exception:
+                # Fallback or strict error handling if needed
                 time.sleep(self.poll_interval)
     
     def start_monitoring(self):

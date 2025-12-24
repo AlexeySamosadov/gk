@@ -1,0 +1,103 @@
+{
+  "api": {
+    "port": 0,
+    "poc_callback_url": "http://api:9200",
+    "ml_grpc_callback_address": "",
+    "public_url": "http://136.243.107.125:8080",
+    "public_server_port": 9000,
+    "ml_server_port": 9100,
+    "admin_server_port": 9200,
+    "ml_grpc_server_port": 0,
+    "test_mode": false
+  },
+  "nodes": [
+    {
+      "host": "inference",
+      "inference_segment": "",
+      "inference_port": 5000,
+      "poc_segment": "",
+      "poc_port": 8080,
+      "models": {
+        "Qwen/Qwen3-32B-FP8": {
+          "args": [
+            "--quantization",
+            "fp8",
+            "--gpu-memory-utilization",
+            "0.9"
+          ]
+        }
+      },
+      "id": "node1",
+      "max_concurrent": 500,
+      "hardware": [
+        {
+          "type": "NVIDIA A100-SXM4-80GB | 80GB",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "merged_node_config": false,
+  "chain_node": {
+    "url": "http://node:26657",
+    "is_genesis": false,
+    "seed_api_url": "http://node1.gonka.ai:9100",
+    "account_public_key": "ApvjX9PWg/sdzjINUPYS98NprsnQIJHUJeAXGEH5JeZH",
+    "signer_key_name": "gonka-account-key",
+    "keyring_backend": "file",
+    "keyring_dir": ""
+  },
+  "upcoming_seed": {
+    "seed": 0,
+    "epoch_index": 0,
+    "signature": "",
+    "claimed": false
+  },
+  "current_seed": {
+    "seed": 2903821467474889079,
+    "epoch_index": 119,
+    "signature": "894529bf267e4427981d6584332b63e9b3128e4307480ad74aac0dc7ff62556e0aa0cf5d913a29d0ff279d4eafbe7d2b5cd700704b5013d6c748a56ee483a3a8",
+    "claimed": false
+  },
+  "previous_seed": {
+    "seed": 1337409165106727090,
+    "epoch_index": 117,
+    "signature": "f1318e4e35b4926a14e62c2357f060bd95f78d8c9f490acbca17ce2a3bd246c61baf86153356f5ee25faa785d66a34184176db8b2911a99ffc71366b04c52dfe",
+    "claimed": true
+  },
+  "current_height": 1845979,
+  "last_processed_height": 1845979,
+  "upgrade_plan": {
+    "name": "",
+    "height": 0,
+    "binaries": null,
+    "node_version": ""
+  },
+  "ml_node_key_config": {
+    "worker_public": "",
+    "worker_private": ""
+  },
+  "nats": {
+    "host": "",
+    "port": 0,
+    "MaxMessagesAgeSeconds": 0
+  },
+  "tx_batching": {
+    "disabled": false,
+    "flush_size": 0,
+    "flush_timeout_seconds": 0
+  },
+  "current_node_version": "v3.0.8",
+  "last_used_version": "v3.0.8",
+  "validation_params": {
+    "timestamp_expiration": 300,
+    "timestamp_advance": 30,
+    "expiration_blocks": 150
+  },
+  "bandwidth_params": {
+    "estimated_limits_per_block_kb": 53760,
+    "kb_per_input_token": 0.0023,
+    "kb_per_output_token": 0.64,
+    "max_inferences_per_block": 1000
+  }
+}
