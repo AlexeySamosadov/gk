@@ -27,7 +27,6 @@ prod-local/
 /public-html/
 /logdy
 /inference-chain/junit-report.xml
-/deploy/**/config.env
 /testermint/reboot.txt
 /local-test-net/node_payload_2.json
 /testermint/downloads/
@@ -39,3 +38,6 @@ cosmovisor/
 deploy/join/.dapi/cosmovisor/
 decentralized-api
 inferenced
+priv_validator_key.json
+node_key.json
+write-file-atomic*
