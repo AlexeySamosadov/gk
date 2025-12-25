@@ -11,17 +11,15 @@ from pow.compute.utils import Phase
 logger = create_logger(__name__)
 
 MODAL_GENERATE_URL = "https://asamosadov--pow-worker-powworker-pow-endpoint.modal.run"
+MODAL_WARMUP_URL = "https://asamosadov--pow-worker-powworker-warmup.modal.run"
 
 
 def warmup_modal():
     """Warmup Modal container before PoC starts."""
     logger.info("Warming up Modal container...")
     try:
-        response = requests.post(
-            "https://asamosadov--pow-worker-powworker-warmup.modal.run",
-            timeout=300,
-        )
-        logger.info(f"Modal warmup response: {response.status_code}")
+        response = requests.post(MODAL_WARMUP_URL, timeout=300)
+        logger.info(f"Modal warmup response: {response.status_code}, time: {response.elapsed.total_seconds():.1f}s")
         return response.status_code == 200
     except Exception as e:
         logger.error(f"Modal warmup error: {e}")
@@ -61,9 +59,11 @@ class ModalWorker(Process):
     def run(self):
         logger.info(f"ModalWorker started for block {self.block_height}")
         total_batches = 0
+        first_request = True
         
         while self._stop_flag.value == 0 and self.phase.value == Phase.GENERATE:
             try:
+                start_time = time.time()
                 response = requests.post(
                     MODAL_GENERATE_URL,
                     json={
@@ -77,6 +77,7 @@ class ModalWorker(Process):
                     },
                     timeout=600,
                 )
+                elapsed = time.time() - start_time
                 response.raise_for_status()
                 result = response.json()
                 
@@ -87,10 +88,14 @@ class ModalWorker(Process):
                     self.generated_batch_queue.put(batch)
                     total_batches += 1
                 
-                logger.info(f"Modal generated {len(batches)} batches, total: {total_batches}")
+                logger.info(f"Modal generated {len(batches)} batches in {elapsed:.1f}s, total: {total_batches}")
+                first_request = False
                 
             except Exception as e:
                 logger.error(f"Modal generation error: {e}")
-                time.sleep(5)
+                if first_request:
+                    logger.info("First request failed, trying warmup...")
+                    warmup_modal()
+                time.sleep(2)
                 
         logger.info(f"ModalWorker stopped, total batches: {total_batches}")
