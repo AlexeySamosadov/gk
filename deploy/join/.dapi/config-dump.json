@@ -54,19 +54,19 @@
     "claimed": false
   },
   "current_seed": {
-    "seed": 2903821467474889079,
-    "epoch_index": 119,
-    "signature": "894529bf267e4427981d6584332b63e9b3128e4307480ad74aac0dc7ff62556e0aa0cf5d913a29d0ff279d4eafbe7d2b5cd700704b5013d6c748a56ee483a3a8",
+    "seed": 7925142925992224190,
+    "epoch_index": 120,
+    "signature": "2afbb8c187bc053052df6dae5798ed466922c74caaba4f0a55dac8eb5eef2c803425940524e4b9490d90dfcd9f210b423b79a21fc39409a7017fda549f981586",
     "claimed": false
   },
   "previous_seed": {
-    "seed": 1337409165106727090,
-    "epoch_index": 117,
-    "signature": "f1318e4e35b4926a14e62c2357f060bd95f78d8c9f490acbca17ce2a3bd246c61baf86153356f5ee25faa785d66a34184176db8b2911a99ffc71366b04c52dfe",
+    "seed": 2903821467474889079,
+    "epoch_index": 119,
+    "signature": "894529bf267e4427981d6584332b63e9b3128e4307480ad74aac0dc7ff62556e0aa0cf5d913a29d0ff279d4eafbe7d2b5cd700704b5013d6c748a56ee483a3a8",
     "claimed": true
   },
-  "current_height": 1848640,
-  "last_processed_height": 1848640,
+  "current_height": 1859202,
+  "last_processed_height": 1859202,
   "upgrade_plan": {
     "name": "",
     "height": 0,
